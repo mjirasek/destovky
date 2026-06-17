@@ -3,6 +3,15 @@
 @import "chessground/assets/chessground.brown.css";
 @import "chessground/assets/chessground.cburnett.css";
 
+/* Override board colours to exact Lichess brown: #f0d9b5 light, #b58863 dark.
+   The bundled brown.css uses a semi-transparent black SVG overlay which
+   produces a desaturated tan instead of the warm Lichess brown. */
+cg-board {
+  background-color: #b58863;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shapeRendering='crispEdges'><rect x='1' y='0' width='1' height='1' fill='%23f0d9b5'/><rect x='0' y='1' width='1' height='1' fill='%23f0d9b5'/></svg>");
+  background-size: 25%;
+}
+
 :root {
   font-family: 'Segoe UI', system-ui, Roboto, sans-serif;
   color-scheme: dark;

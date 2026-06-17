@@ -1,0 +1,68 @@
+@import "tailwindcss";
+@import "chessground/assets/chessground.base.css";
+@import "chessground/assets/chessground.brown.css";
+@import "chessground/assets/chessground.cburnett.css";
+
+:root {
+  font-family: 'Segoe UI', system-ui, Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #161512;
+  color: #bababa;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/*
+ * Chessground sets cg-container width/height via inline style at init time.
+ * If measured before layout settles the inline is "width: 0px". Override it
+ * so the board always fills its .cg-wrap parent.
+ */
+.cg-wrap cg-container {
+  width: 100% !important;
+  height: 100% !important;
+  padding-bottom: 0 !important;
+}
+
+/* Card flip animation */
+.deck-card {
+  perspective: 800px;
+}
+.deck-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.deck-card.is-flipped .deck-card-inner {
+  transform: rotateY(180deg);
+}
+.deck-card-face,
+.deck-card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 0.5rem;
+}
+.deck-card-back {
+  transform: rotateY(180deg);
+}
+
+/* Clickable deck glow when it's your turn */
+.deck-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.deck-clickable:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0 18px 4px rgba(98, 153, 36, 0.55);
+}
+.deck-clickable:active {
+  transform: translateY(0);
+}

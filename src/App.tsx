@@ -51,11 +51,13 @@ interface TimeControl { initial: number; increment: number; label: string; }
 // ── Responsive hook ───────────────────────────────────────────────────────────
 
 function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 640);
+  const mq = '(max-width: 767px)';
+  const [mobile, setMobile] = useState(() => window.matchMedia(mq).matches);
   useEffect(() => {
-    const h = () => setMobile(window.innerWidth < 640);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
+    const media = window.matchMedia(mq);
+    const h = (e: MediaQueryListEvent) => setMobile(e.matches);
+    media.addEventListener('change', h);
+    return () => media.removeEventListener('change', h);
   }, []);
   return mobile;
 }

@@ -53,11 +53,11 @@ export default function MoveList({ notations, cursor, onBack, onForward }: Props
         ))}
       </div>
 
-      {/* Move list */}
+      {/* Move list — fixed height so adding moves never shifts layout */}
       <div
         style={{
           background: '#1a1816', border: '1px solid #3d3b38', borderRadius: '8px',
-          padding: '6px 4px', maxHeight: '220px', overflowY: 'auto',
+          padding: '6px 4px', height: '150px', overflowY: 'auto',
           fontSize: '11px', fontFamily: 'monospace',
         }}
       >

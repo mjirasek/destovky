@@ -267,8 +267,8 @@ export default function App() {
           )}
         </div>
 
-        {/* Board */}
-        <div style={{ padding: '0 6px' }}>{boardEl}</div>
+        {/* Board — full width, no side padding */}
+        <div>{boardEl}</div>
 
         {/* White player row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', gap: '8px' }}>

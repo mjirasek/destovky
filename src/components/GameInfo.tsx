@@ -50,7 +50,7 @@ export default function GameInfo({ state, notations, cursor, timePresets, timeCo
   const isViewingHistory = cursor < notations.length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '190px', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '420px' }}>
 
       {/* Game over */}
       {gameOver && (

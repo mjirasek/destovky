@@ -40,20 +40,31 @@ function formatClock(s: number): string {
 // ── Time presets ─────────────────────────────────────────────────────────────
 
 const TIME_PRESETS = [
-  { label: '∞',    initial: 0,    increment: 0 },
-  { label: '3+2',  initial: 180,  increment: 2 },
-  { label: '5+0',  initial: 300,  increment: 0 },
-  { label: '10+0', initial: 600,  increment: 0 },
-  { label: '15+10',initial: 900,  increment: 10 },
+  { label: '∞',     initial: 0,    increment: 0 },
+  { label: '3+2',   initial: 180,  increment: 2 },
+  { label: '5+0',   initial: 300,  increment: 0 },
+  { label: '10+0',  initial: 600,  increment: 0 },
+  { label: '15+10', initial: 900,  increment: 10 },
 ];
-
 interface TimeControl { initial: number; increment: number; label: string; }
+
+// ── Responsive hook ───────────────────────────────────────────────────────────
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const h = () => setMobile(window.innerWidth < 640);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return mobile;
+}
 
 // ── Knight logo ───────────────────────────────────────────────────────────────
 
 function KnightLogo() {
   return (
-    <svg viewBox="0 0 50 50" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 50 50" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M 12 38 C 12 38 13 27 19 25 C 19 25 15 24 14 18 C 14 18 16 11 24 10 C 24 10 22 14 25 15 C 25 15 29 8 35 9 C 35 9 30 12 31 17 C 31 17 37 12 39 16 C 39 16 34 17 33 22 C 33 22 38 22 38 27 C 38 27 32 25 28 30 C 28 30 32 31 32 38 Z"
         fill="#629924" stroke="#4a7018" strokeWidth="1.5" strokeLinejoin="round" />
       <ellipse cx="20" cy="17" rx="2" ry="2" fill="#1a2a08" />
@@ -61,17 +72,21 @@ function KnightLogo() {
   );
 }
 
-// ── Clock display ─────────────────────────────────────────────────────────────
+// ── Clock component ───────────────────────────────────────────────────────────
 
-function ClockDisplay({ seconds, active }: { seconds: number; active: boolean }) {
-  const color = seconds < 10 ? '#ff4444' : seconds < 30 ? '#ff9944' : active ? '#e0dbd4' : '#6e6b67';
+function Clock({ seconds, active, large }: { seconds: number; active: boolean; large?: boolean }) {
+  const col = seconds < 10 ? '#ff4444' : seconds < 30 ? '#ff9944' : active ? '#e0dbd4' : '#6e6b67';
   return (
     <span style={{
-      fontFamily: 'monospace', fontWeight: 700, fontSize: '14px', color,
+      fontFamily: 'monospace', fontWeight: 700,
+      fontSize: large ? '18px' : '13px',
+      color: col,
       background: active ? '#1a1816' : 'transparent',
       border: `1px solid ${active ? '#3d3b38' : 'transparent'}`,
-      borderRadius: '4px', padding: '1px 6px',
-      minWidth: '42px', textAlign: 'center', display: 'inline-block',
+      borderRadius: '4px',
+      padding: large ? '3px 10px' : '1px 6px',
+      minWidth: large ? '58px' : '42px',
+      textAlign: 'center', display: 'inline-block',
     }}>
       {formatClock(seconds)}
     </span>
@@ -81,6 +96,7 @@ function ClockDisplay({ seconds, active }: { seconds: number; active: boolean })
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const isMobile = useIsMobile();
   const initial = createInitialState();
   const [liveGame, setLiveGame] = useState<GameState>(initial);
   const [snapshots, setSnapshots] = useState<GameState[]>([initial]);
@@ -88,7 +104,6 @@ export default function App() {
   const [snapshotCursor, setSnapshotCursor] = useState<number | null>(null);
   const [pendingNotation, setPendingNotation] = useState('');
 
-  // Clocks
   const [timeControl, setTimeControl] = useState<TimeControl>(TIME_PRESETS[0]);
   const [clocks, setClocks] = useState({ white: 0, black: 0 });
   const [clocksActive, setClocksActive] = useState(false);
@@ -99,23 +114,19 @@ export default function App() {
   const interactive = atLatest && !liveGame.pendingPromotion;
   const listCursor = atLatest ? notations.length : snapshotCursor!;
 
-  // Keep turnRef in sync for the clock interval
   useEffect(() => { turnRef.current = liveGame.turn; }, [liveGame.turn]);
 
-  // Clock ticker — decrements active player's clock once per second
   useEffect(() => {
     if (!clocksActive || liveGame.gameOver || timeControl.initial === 0) return;
     const id = setInterval(() => {
       setClocks(prev => {
         const color = turnRef.current;
-        const remaining = Math.max(0, prev[color] - 1);
-        return { ...prev, [color]: remaining };
+        return { ...prev, [color]: Math.max(0, prev[color] - 1) };
       });
     }, 1000);
     return () => clearInterval(id);
   }, [clocksActive, liveGame.gameOver, timeControl.initial]);
 
-  // Timeout detection
   useEffect(() => {
     if (!clocksActive || timeControl.initial === 0 || liveGame.gameOver) return;
     if (clocks[liveGame.turn] === 0) {
@@ -124,7 +135,6 @@ export default function App() {
     }
   }, [clocks, clocksActive, liveGame.turn, liveGame.gameOver, timeControl.initial]);
 
-  // Keyboard navigation: ← back, → forward
   const handleBack = useCallback(() => {
     const current = snapshotCursor ?? snapshots.length - 1;
     if (current > 0) setSnapshotCursor(current - 1);
@@ -152,19 +162,14 @@ export default function App() {
     setSnapshotCursor(null);
     if (timeControl.initial > 0) {
       setClocksActive(true);
-      if (timeControl.increment > 0) {
+      if (timeControl.increment > 0)
         setClocks(prev => ({ ...prev, [movedColor]: prev[movedColor] + timeControl.increment }));
-      }
     }
   }
 
   const handleNewGame = useCallback(() => {
     const s = createInitialState();
-    setLiveGame(s);
-    setSnapshots([s]);
-    setNotations([]);
-    setSnapshotCursor(null);
-    setPendingNotation('');
+    setLiveGame(s); setSnapshots([s]); setNotations([]); setSnapshotCursor(null); setPendingNotation('');
     setClocks({ white: timeControl.initial, black: timeControl.initial });
     setClocksActive(false);
   }, [timeControl.initial]);
@@ -184,30 +189,23 @@ export default function App() {
     if (!liveGame.cardFlipped || !liveGame.legalPlacementSquares.includes(sq)) return;
     const deck = liveGame.turn === 'white' ? liveGame.whiteDecks : liveGame.blackDecks;
     const card = deck.revealed!;
-    const notation = placeNotation(card.type, liveGame.turn, sq);
     const movedColor = liveGame.turn;
-    const next = placePiece(liveGame, sq);
-    pushSnapshot(next, notation, movedColor);
+    pushSnapshot(placePiece(liveGame, sq), placeNotation(card.type, liveGame.turn, sq), movedColor);
   }, [interactive, liveGame]);
 
   const handleMove = useCallback((from: Square, to: Square) => {
     if (!interactive) return;
     const piece = liveGame.board.get(from);
     if (!piece) return;
-    const captured = liveGame.board.has(to);
-    const notation = moveNotation(piece, from, to, captured);
+    const notation = moveNotation(piece, from, to, liveGame.board.has(to));
     const movedColor = liveGame.turn;
     const next = makeMove(liveGame, from, to);
-    if (next.pendingPromotion) {
-      setPendingNotation(notation);
-      setLiveGame(next);
-    } else {
-      pushSnapshot(next, notation, movedColor);
-    }
+    if (next.pendingPromotion) { setPendingNotation(notation); setLiveGame(next); }
+    else pushSnapshot(next, notation, movedColor);
   }, [interactive, liveGame]);
 
   const handlePromotion = useCallback((role: CGRole) => {
-    const movedColor = liveGame.turn; // turn hasn't advanced yet
+    const movedColor = liveGame.turn;
     const notation = pendingNotation + '=' + SYM[role][movedColor];
     const next = completePromotion(liveGame, role);
     setPendingNotation('');
@@ -223,8 +221,72 @@ export default function App() {
   const whiteActive = displayGame.turn === 'white' && !displayGame.gameOver;
   const showClocks = timeControl.initial > 0;
 
-  function PlayerLabel({ color, active }: { color: Color; active: boolean }) {
-    const isBlack = color === 'black';
+  // ── Board + promotion overlay (shared) ──────────────────────────────────────
+  const boardEl = (
+    <div style={{ position: 'relative' }}>
+      <ChessBoard state={displayGame} onSquareClick={handleSquareClickDirect} onMove={handleMove} interactive={interactive} />
+      {liveGame.pendingPromotion && atLatest && (
+        <PromotionDialog color={liveGame.turn} onSelect={handlePromotion} />
+      )}
+    </div>
+  );
+
+  const gameInfoEl = (
+    <GameInfo
+      state={displayGame}
+      notations={notations}
+      cursor={listCursor}
+      timePresets={TIME_PRESETS}
+      timeControl={timeControl}
+      onTimeControlChange={handleTimeControlChange}
+      onNewGame={handleNewGame}
+      onBack={handleBack}
+      onForward={handleForward}
+    />
+  );
+
+  // ── MOBILE layout ────────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
+        {/* Header */}
+        <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px' }}>
+          <KnightLogo />
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: '16px' }}>Raindrop Chess</span>
+          <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '10px', fontWeight: 600, padding: '1px 6px', marginLeft: 'auto' }}>hot seat</span>
+        </header>
+
+        {/* Black player row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', gap: '8px' }}>
+          <MobilePlayerRow color="black" active={blackActive} />
+          <CardPile deck={displayGame.blackDecks} color="black" isActive={blackActive} canFlip={canBlackFlip} onFlipCard={handleFlipCard} layout="horizontal" />
+          {showClocks && (
+            <Clock seconds={clocks.black} active={blackActive && atLatest && clocksActive} large />
+          )}
+        </div>
+
+        {/* Board */}
+        <div style={{ padding: '0 6px' }}>{boardEl}</div>
+
+        {/* White player row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', gap: '8px' }}>
+          <MobilePlayerRow color="white" active={whiteActive} />
+          <CardPile deck={displayGame.whiteDecks} color="white" isActive={whiteActive} canFlip={canWhiteFlip} onFlipCard={handleFlipCard} layout="horizontal" />
+          {showClocks && (
+            <Clock seconds={clocks.white} active={whiteActive && atLatest && clocksActive} large />
+          )}
+        </div>
+
+        {/* Game info below board */}
+        <div style={{ padding: '4px 10px 16px' }}>
+          {gameInfoEl}
+        </div>
+      </div>
+    );
+  }
+
+  // ── DESKTOP layout ───────────────────────────────────────────────────────────
+  function DesktopPlayerLabel({ color, active }: { color: Color; active: boolean }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
         <span style={{
@@ -233,9 +295,9 @@ export default function App() {
           color: active ? '#a8d060' : '#6e6b67',
           background: active ? '#1e2a0f' : 'transparent',
           border: `1px solid ${active ? '#3a5a12' : 'transparent'}`,
-        }}>{isBlack ? '⬛ Black' : '⬜ White'}</span>
+        }}>{color === 'black' ? '⬛ Black' : '⬜ White'}</span>
         {showClocks && (
-          <ClockDisplay seconds={clocks[color]} active={active && atLatest && clocksActive} />
+          <Clock seconds={clocks[color]} active={active && atLatest && clocksActive} />
         )}
       </div>
     );
@@ -243,8 +305,6 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
-
-      {/* Header */}
       <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <KnightLogo />
@@ -254,49 +314,37 @@ export default function App() {
         <span style={{ fontSize: '11px', color: '#6e6b67' }}>Powered by chessground &amp; chessops</span>
       </header>
 
-      {/* Main */}
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', gap: '20px' }}>
-
-        {/* Fixed grid: [pile | board | pile] */}
         <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr 96px', gap: '16px', alignItems: 'center', width: '100%', maxWidth: '752px' }}>
-
-          {/* Black */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <PlayerLabel color="black" active={blackActive} />
-            <CardPile deck={displayGame.blackDecks} color="black" isActive={blackActive} canFlip={canBlackFlip} onFlipCard={handleFlipCard} />
+            <DesktopPlayerLabel color="black" active={blackActive} />
+            <CardPile deck={displayGame.blackDecks} color="black" isActive={blackActive} canFlip={canBlackFlip} onFlipCard={handleFlipCard} layout="vertical" />
           </div>
-
-          {/* Board + promotion overlay */}
-          <div style={{ position: 'relative' }}>
-            <ChessBoard state={displayGame} onSquareClick={handleSquareClickDirect} onMove={handleMove} interactive={interactive} />
-            {liveGame.pendingPromotion && atLatest && (
-              <PromotionDialog color={liveGame.turn} onSelect={handlePromotion} />
-            )}
-          </div>
-
-          {/* White */}
+          {boardEl}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <PlayerLabel color="white" active={whiteActive} />
-            <CardPile deck={displayGame.whiteDecks} color="white" isActive={whiteActive} canFlip={canWhiteFlip} onFlipCard={handleFlipCard} />
+            <DesktopPlayerLabel color="white" active={whiteActive} />
+            <CardPile deck={displayGame.whiteDecks} color="white" isActive={whiteActive} canFlip={canWhiteFlip} onFlipCard={handleFlipCard} layout="vertical" />
           </div>
         </div>
-
-        {/* Divider */}
         <div style={{ width: '1px', alignSelf: 'stretch', background: '#3d3b38', flexShrink: 0 }} />
-
-        {/* Info panel */}
-        <GameInfo
-          state={displayGame}
-          notations={notations}
-          cursor={listCursor}
-          timePresets={TIME_PRESETS}
-          timeControl={timeControl}
-          onTimeControlChange={handleTimeControlChange}
-          onNewGame={handleNewGame}
-          onBack={handleBack}
-          onForward={handleForward}
-        />
+        {gameInfoEl}
       </main>
+    </div>
+  );
+}
+
+// ── Mobile player row ─────────────────────────────────────────────────────────
+
+function MobilePlayerRow({ color, active }: { color: Color; active: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '80px' }}>
+      <span style={{
+        width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+        background: active ? '#629924' : '#3d3b38',
+      }} />
+      <span style={{ fontSize: '13px', fontWeight: active ? 700 : 400, color: active ? '#e0dbd4' : '#6e6b67' }}>
+        {color === 'black' ? 'Black' : 'White'}
+      </span>
     </div>
   );
 }

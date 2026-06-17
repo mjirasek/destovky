@@ -1,15 +1,6 @@
-/**
- * Raindrop Chess game state manager.
- * Keeps all mutable state immutable-style (returns new state objects).
- */
-
 import { createDeck } from './deck';
-import {
-  legalPlacementSquares,
-  legalChessMoves,
-  isInCheck,
-} from './chessEngine';
-import type { GameState, Color, CGPiece, Square, TurnMode, Deck } from './types';
+import { legalPlacementSquares, legalChessMoves, isInCheck } from './chessEngine';
+import type { GameState, Color, CGPiece, CGRole, Square, TurnMode, Deck } from './types';
 
 function opposite(c: Color): Color {
   return c === 'white' ? 'black' : 'white';
@@ -18,8 +9,6 @@ function opposite(c: Color): Color {
 function makeDeck(): Deck {
   return { pile: createDeck(), revealed: null };
 }
-
-// ── Initial state ─────────────────────────────────────────────────────────────
 
 export function createInitialState(): GameState {
   return {
@@ -36,175 +25,131 @@ export function createInitialState(): GameState {
     inCheck: false,
     gameOver: false,
     winner: null,
+    pendingPromotion: null,
   };
 }
 
-// ── Actions ───────────────────────────────────────────────────────────────────
-
-/**
- * Flip the top card of the current player's deck.
- * Returns new state with the revealed card.
- */
 export function flipCard(state: GameState): GameState {
   if (state.cardFlipped || state.gameOver) return state;
-
   const deckKey = state.turn === 'white' ? 'whiteDecks' : 'blackDecks';
   const deck = state[deckKey];
-
   if (deck.pile.length === 0) return state;
-
   const [top, ...rest] = deck.pile;
-  const newDeck: Deck = { pile: rest, revealed: top };
   const placementSquares = legalPlacementSquares(top.type, state.turn, state.board);
-
   return {
     ...state,
-    [deckKey]: newDeck,
+    [deckKey]: { pile: rest, revealed: top },
     cardFlipped: true,
     legalPlacementSquares: placementSquares,
   };
 }
 
-/**
- * Place the revealed card on `square`.
- */
 export function placePiece(state: GameState, square: Square): GameState {
   if (state.gameOver) return state;
   if (!state.legalPlacementSquares.includes(square)) return state;
-
   const deckKey = state.turn === 'white' ? 'whiteDecks' : 'blackDecks';
   const deck = state[deckKey];
   if (!deck.revealed) return state;
-
   const card = deck.revealed;
-
-  // Map card type to CGRole
   const role: CGPiece['role'] =
-    card.type === 'bishop-light' || card.type === 'bishop-dark'
-      ? 'bishop'
-      : card.type;
-
+    card.type === 'bishop-light' || card.type === 'bishop-dark' ? 'bishop' : card.type;
   const newBoard = new Map(state.board);
   newBoard.set(square, { role, color: state.turn });
-
-  const newDeck: Deck = { ...deck, revealed: null };
-
-  const whiteKingPlaced =
-    state.turn === 'white' && card.type === 'king' ? true : state.whiteKingPlaced;
-  const blackKingPlaced =
-    state.turn === 'black' && card.type === 'king' ? true : state.blackKingPlaced;
-
-  const nextTurn = opposite(state.turn);
-
-  let newState: GameState = {
+  const whiteKingPlaced = state.turn === 'white' && card.type === 'king' ? true : state.whiteKingPlaced;
+  const blackKingPlaced = state.turn === 'black' && card.type === 'king' ? true : state.blackKingPlaced;
+  return resolveNextTurn({
     ...state,
     board: newBoard,
-    [deckKey]: newDeck,
-    turn: nextTurn,
+    [deckKey]: { ...deck, revealed: null },
+    turn: opposite(state.turn),
     cardFlipped: false,
     whiteKingPlaced,
     blackKingPlaced,
     legalPlacementSquares: [],
     legalMoves: new Map(),
-  };
-
-  return resolveNextTurn(newState);
+    pendingPromotion: null,
+  });
 }
 
-/**
- * Make a chess move (from → to).
- */
 export function makeMove(state: GameState, from: Square, to: Square): GameState {
   if (state.gameOver) return state;
-
   const legal = state.legalMoves.get(from);
   if (!legal || !legal.includes(to)) return state;
-
   const newBoard = new Map(state.board);
   const piece = newBoard.get(from)!;
   newBoard.delete(from);
   newBoard.set(to, piece);
-
-  // Pawn promotion: auto-promote to queen when reaching back rank
   const rank = to >> 3;
-  if (piece.role === 'pawn') {
-    if ((piece.color === 'white' && rank === 7) || (piece.color === 'black' && rank === 0)) {
-      newBoard.set(to, { ...piece, role: 'queen' });
-    }
+  // Pawn reaches back rank — pause for promotion choice
+  if (
+    piece.role === 'pawn' &&
+    ((piece.color === 'white' && rank === 7) || (piece.color === 'black' && rank === 0))
+  ) {
+    return {
+      ...state,
+      board: newBoard,
+      cardFlipped: false,
+      legalPlacementSquares: [],
+      legalMoves: new Map(),
+      pendingPromotion: { from, to },
+    };
   }
-
-  const nextTurn = opposite(state.turn);
-  let newState: GameState = {
+  return resolveNextTurn({
     ...state,
     board: newBoard,
-    turn: nextTurn,
+    turn: opposite(state.turn),
     cardFlipped: false,
     legalPlacementSquares: [],
     legalMoves: new Map(),
-  };
-
-  return resolveNextTurn(newState);
+    pendingPromotion: null,
+  });
 }
 
-// ── Internal ──────────────────────────────────────────────────────────────────
+export function completePromotion(state: GameState, role: CGRole): GameState {
+  if (!state.pendingPromotion) return state;
+  const { to } = state.pendingPromotion;
+  const newBoard = new Map(state.board);
+  const piece = newBoard.get(to);
+  if (!piece) return state;
+  newBoard.set(to, { ...piece, role });
+  return resolveNextTurn({
+    ...state,
+    board: newBoard,
+    turn: opposite(state.turn),
+    pendingPromotion: null,
+    cardFlipped: false,
+    legalPlacementSquares: [],
+    legalMoves: new Map(),
+  });
+}
 
 function resolveNextTurn(state: GameState): GameState {
   const { turn } = state;
   const myKingPlaced = turn === 'white' ? state.whiteKingPlaced : state.blackKingPlaced;
-
   const inCheck = isInCheck(turn, state.board);
-  const legalMoves = myKingPlaced
-    ? legalChessMoves(turn, state.board)
-    : new Map<Square, Square[]>();
+  const legalMoves = myKingPlaced ? legalChessMoves(turn, state.board) : new Map<Square, Square[]>();
 
-  // Check for checkmate
   if (myKingPlaced && inCheck) {
     const hasMoves = legalMoves.size > 0;
-    const myDeckKey = turn === 'white' ? 'whiteDecks' : 'blackDecks';
-    const myDeck = state[myDeckKey];
-    const hasCardsLeft = myDeck.pile.length > 0;
-
-    // Can any placement resolve the check?
+    const myDeck = turn === 'white' ? state.whiteDecks : state.blackDecks;
     let canPlaceToResolve = false;
-    if (hasCardsLeft) {
-      // Try each card type remaining in deck to see if any placement can resolve check
-      const uniqueTypes = new Set(myDeck.pile.map(c => c.type));
-      for (const cardType of uniqueTypes) {
-        const squares = legalPlacementSquares(cardType, turn, state.board);
-        for (const sq of squares) {
+    if (myDeck.pile.length > 0) {
+      for (const cardType of new Set(myDeck.pile.map(c => c.type))) {
+        for (const sq of legalPlacementSquares(cardType, turn, state.board)) {
           const testBoard = new Map(state.board);
-          const role: CGPiece['role'] = cardType === 'bishop-light' || cardType === 'bishop-dark' ? 'bishop' : (cardType as CGPiece['role']);
+          const role: CGPiece['role'] =
+            cardType === 'bishop-light' || cardType === 'bishop-dark' ? 'bishop' : (cardType as CGPiece['role']);
           testBoard.set(sq, { role, color: turn });
-          if (!isInCheck(turn, testBoard)) {
-            canPlaceToResolve = true;
-            break;
-          }
+          if (!isInCheck(turn, testBoard)) { canPlaceToResolve = true; break; }
         }
         if (canPlaceToResolve) break;
       }
     }
-
     if (!hasMoves && !canPlaceToResolve) {
-      return {
-        ...state,
-        inCheck: true,
-        legalMoves,
-        legalPlacementSquares: [],
-        gameOver: true,
-        winner: opposite(turn),
-        turnMode: 'must-move',
-      };
+      return { ...state, inCheck: true, legalMoves, legalPlacementSquares: [], gameOver: true, winner: opposite(turn), turnMode: 'must-move', pendingPromotion: null };
     }
   }
 
-  let turnMode: TurnMode;
-  if (!myKingPlaced) {
-    turnMode = 'must-place';
-  } else if (inCheck) {
-    turnMode = 'must-move';
-  } else {
-    turnMode = 'choose';
-  }
-
-  return { ...state, inCheck, legalMoves, legalPlacementSquares: [], turnMode };
+  const turnMode: TurnMode = !myKingPlaced ? 'must-place' : inCheck ? 'must-move' : 'choose';
+  return { ...state, inCheck, legalMoves, legalPlacementSquares: [], turnMode, pendingPromotion: null };
 }

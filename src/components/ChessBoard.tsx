@@ -8,10 +8,10 @@ import type { GameState, Color, Square } from '../types';
 
 interface Props {
   state: GameState;
-  /** Called when a square is clicked (used for placement mode) */
   onSquareClick: (sq: Square) => void;
-  /** Called when a chess move completes (click-click or drag-drop) */
   onMove: (from: Square, to: Square) => void;
+  /** False when viewing history or promotion pending — disables all board interaction */
+  interactive: boolean;
 }
 
 function buildCGPieces(board: Map<Square, { role: string; color: Color }>): Map<Key, CGLibPiece> {
@@ -30,7 +30,7 @@ function buildDests(legalMoves: Map<Square, Square[]>): Map<Key, Key[]> {
   return dests;
 }
 
-export default function ChessBoard({ state, onSquareClick, onMove }: Props) {
+export default function ChessBoard({ state, onSquareClick, onMove, interactive }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cgRef = useRef<Api | null>(null);
 
@@ -75,10 +75,10 @@ export default function ChessBoard({ state, onSquareClick, onMove }: Props) {
     const cg = cgRef.current;
     if (!cg) return;
 
-    // Placement mode: card flipped, waiting to place a piece
-    const isPlacing = state.cardFlipped && !state.gameOver;
-    // Move mode: king placed, no card in hand — pieces are immediately interactive
+    const isPlacing = interactive && state.cardFlipped && !state.gameOver;
     const isMoving =
+      interactive &&
+      !state.pendingPromotion &&
       (state.turnMode === 'choose' || state.turnMode === 'must-move') &&
       !state.cardFlipped &&
       !state.gameOver;
@@ -123,7 +123,7 @@ export default function ChessBoard({ state, onSquareClick, onMove }: Props) {
       if (JSON.stringify(cur) !== JSON.stringify(des)) diff.set(key, des);
     }
     if (diff.size > 0) cg.setPieces(diff as any);
-  }, [state]);
+  }, [state, interactive]);
 
   return (
     <div

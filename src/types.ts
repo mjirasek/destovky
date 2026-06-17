@@ -48,4 +48,6 @@ export interface GameState {
   inCheck: boolean;
   gameOver: boolean;
   winner: Color | null;
+  /** Set when a pawn reaches the back rank; cleared after promotion choice */
+  pendingPromotion: { from: Square; to: Square } | null;
 }

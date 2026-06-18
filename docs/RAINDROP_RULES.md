@@ -89,13 +89,10 @@ When a pawn reaches the farthest rank, it promotes immediately:
 
 - White promotes on rank 8.
 - Black promotes on rank 1.
-- The choice is queen, rook, bishop, or knight.
+- The selectable pieces are queen, rook, bishop, and knight.
 
-Promotion is not limited by captured pieces or by the original deck contents. For example, a side may have more than one queen after promotion.
-
-There is still a hard upper bound: each side starts with only 8 pawns, so each side can promote at most 8 times in a game. The app tracks this as "promotions left".
+There is a hard upper bound: each side starts with only 8 pawns, so each side can promote at most 8 times in a game. The app tracks this as "promotions left" and shows the selectable promotion pieces next to that count.
 
 ## Game End
 
 The game ends when one side is checkmated, loses after flipping a card that cannot resolve check, or loses on time if a clock is enabled.
-

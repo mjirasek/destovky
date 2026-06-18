@@ -22,9 +22,6 @@ interface Props {
   onOpenGame: (gameId: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onClearQueue: () => Promise<void>;
-  onResign: () => Promise<void>;
-  onOfferOrAcceptDraw: () => Promise<void>;
-  onDeclineDraw: () => Promise<void>;
   onLeaveGame: () => Promise<void>;
 }
 
@@ -51,9 +48,6 @@ export default function MultiplayerPanel({
   onOpenGame,
   onRefresh,
   onClearQueue,
-  onResign,
-  onOfferOrAcceptDraw,
-  onDeclineDraw,
   onLeaveGame,
 }: Props) {
   const [email, setEmail] = useState('misa@raindrop.local');
@@ -111,31 +105,6 @@ export default function MultiplayerPanel({
               </span>
             )}
           </div>
-          {!gameOver && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
-              <button type="button" title="Resign game" style={resignActionButtonStyle} onClick={onResign}>
-                resign
-              </button>
-              <button
-                type="button"
-                title={drawOfferFromOpponent ? 'Accept draw offer' : 'Offer draw'}
-                style={{
-                  ...drawActionButtonStyle,
-                  opacity: drawOfferBy === activeSeat ? 0.55 : 1,
-                  cursor: drawOfferBy === activeSeat ? 'default' : 'pointer',
-                }}
-                onClick={onOfferOrAcceptDraw}
-                disabled={drawOfferBy === activeSeat}
-              >
-                {drawOfferFromOpponent ? 'accept draw' : drawOfferBy === activeSeat ? 'draw offered' : 'offer draw'}
-              </button>
-              {drawOfferFromOpponent && (
-                <button type="button" style={{ ...neutralActionButtonStyle, gridColumn: '1 / -1' }} onClick={onDeclineDraw}>
-                  decline draw
-                </button>
-              )}
-            </div>
-          )}
           {gameOver && (
             <button style={smallButtonStyle} onClick={onLeaveGame}>Back to lobby</button>
           )}
@@ -277,37 +246,6 @@ const smallButtonStyle: React.CSSProperties = {
   fontSize: '10px',
   fontWeight: 700,
   cursor: 'pointer',
-};
-
-const actionButtonBaseStyle: React.CSSProperties = {
-  borderRadius: '5px',
-  padding: '7px 8px',
-  fontSize: '11px',
-  fontWeight: 800,
-  cursor: 'pointer',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-};
-
-const resignActionButtonStyle: React.CSSProperties = {
-  ...actionButtonBaseStyle,
-  background: '#2b1a17',
-  color: '#d78c76',
-  border: '1px solid #694038',
-};
-
-const drawActionButtonStyle: React.CSSProperties = {
-  ...actionButtonBaseStyle,
-  background: '#20201d',
-  color: '#c4beb6',
-  border: '1px solid #4a463f',
-};
-
-const neutralActionButtonStyle: React.CSSProperties = {
-  ...actionButtonBaseStyle,
-  background: '#1a1816',
-  color: '#9e9b96',
-  border: '1px solid #3d3b38',
 };
 
 const bodyText: React.CSSProperties = {

@@ -536,9 +536,12 @@ export default function App() {
 
   const handleDeclineDraw = useCallback(async () => {
     if (!activeGame || !activeSeat || liveGame.gameOver) return;
-    if (liveGame.drawOfferBy === activeSeat || !liveGame.drawOfferBy) return;
-    commitSnapshot({ ...liveGame, drawOfferBy: null }, `${colorName(activeSeat)} declines draw`);
-    setMpStatus('Draw declined');
+    if (!liveGame.drawOfferBy) return;
+    const notation = liveGame.drawOfferBy === activeSeat
+      ? `${colorName(activeSeat)} cancels draw offer`
+      : `${colorName(activeSeat)} declines draw`;
+    commitSnapshot({ ...liveGame, drawOfferBy: null }, notation);
+    setMpStatus(liveGame.drawOfferBy === activeSeat ? 'Draw offer cancelled' : 'Draw declined');
   }, [activeGame, activeSeat, commitSnapshot, liveGame]);
 
   useEffect(() => {
@@ -634,6 +637,8 @@ export default function App() {
         showClocks={showClocks && !isMobile}
         clocksActive={clocksActive}
         atLatest={atLatest}
+        activeSeat={activeSeat}
+        drawOfferBy={liveGame.drawOfferBy}
         timePresets={TIME_PRESETS}
         timeControl={timeControl}
         onTimeControlChange={handleTimeControlChange}
@@ -642,6 +647,9 @@ export default function App() {
         onBack={handleBack}
         onForward={handleForward}
         onLast={handleLast}
+        onResign={handleResign}
+        onOfferOrAcceptDraw={handleOfferOrAcceptDraw}
+        onDeclineDraw={handleDeclineDraw}
       />
       <MultiplayerPanel
         configured={hasSupabaseConfig}
@@ -662,9 +670,6 @@ export default function App() {
         onOpenGame={handleOpenGame}
         onRefresh={refreshMultiplayer}
         onClearQueue={handleClearChallengeQueue}
-        onResign={handleResign}
-        onOfferOrAcceptDraw={handleOfferOrAcceptDraw}
-        onDeclineDraw={handleDeclineDraw}
         onLeaveGame={handleLeaveMultiplayerGame}
       />
     </div>

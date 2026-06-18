@@ -11,6 +11,8 @@ interface Props {
   showClocks: boolean;
   clocksActive: boolean;
   atLatest: boolean;
+  activeSeat: Color | null;
+  drawOfferBy: Color | null;
   timePresets: TimeControl[];
   timeControl: TimeControl;
   onTimeControlChange: (tc: TimeControl) => void;
@@ -19,6 +21,9 @@ interface Props {
   onBack: () => void;
   onForward: () => void;
   onLast: () => void;
+  onResign: () => Promise<void>;
+  onOfferOrAcceptDraw: () => Promise<void>;
+  onDeclineDraw: () => Promise<void>;
 }
 
 const CARD_NAMES: Record<CardType, string> = {
@@ -42,6 +47,8 @@ export default function GameInfo({
   showClocks,
   clocksActive,
   atLatest,
+  activeSeat,
+  drawOfferBy,
   timePresets,
   timeControl,
   onTimeControlChange,
@@ -50,6 +57,9 @@ export default function GameInfo({
   onBack,
   onForward,
   onLast,
+  onResign,
+  onOfferOrAcceptDraw,
+  onDeclineDraw,
 }: Props) {
   const { turn, turnMode, cardFlipped, gameOver, winner, inCheck, whiteDecks, blackDecks, promotionCounts } = state;
   const myDeck = turn === 'white' ? whiteDecks : blackDecks;
@@ -84,17 +94,12 @@ export default function GameInfo({
   }
 
   const isViewingHistory = cursor < notations.length;
+  const drawOfferFromOpponent = activeSeat && drawOfferBy && drawOfferBy !== activeSeat;
+  const canUseGameActions = Boolean(activeSeat) && !gameOver && atLatest;
+  const showInlinePromotions = showClocks;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '420px' }}>
-      {showClocks && (
-        <SideClock
-          color="black"
-          seconds={clocks.black}
-          active={turn === 'black' && !gameOver && atLatest && clocksActive}
-        />
-      )}
-
       {/* Game over */}
       {gameOver && (
         <div style={{ background: '#1e2a0f', border: '1px solid #629924', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
@@ -142,24 +147,46 @@ export default function GameInfo({
       )}
 
       {/* Move list */}
-      <MoveList
-        notations={notations}
-        cursor={cursor}
-        onFirst={onFirst}
-        onBack={onBack}
-        onForward={onForward}
-        onLast={onLast}
-      />
-
-      {showClocks && (
-        <SideClock
-          color="white"
-          seconds={clocks.white}
-          active={turn === 'white' && !gameOver && atLatest && clocksActive}
+      <div style={showClocks ? desktopGamePanelStyle : { display: 'grid', gap: '6px' }}>
+        {showClocks && (
+          <SideClock
+            color="black"
+            seconds={clocks.black}
+            active={turn === 'black' && !gameOver && atLatest && clocksActive}
+            promotionsLeft={promotionsLeft.black}
+          />
+        )}
+        <MoveList
+          notations={notations}
+          cursor={cursor}
+          onFirst={onFirst}
+          onBack={onBack}
+          onForward={onForward}
+          onLast={onLast}
+          embedded={showClocks}
         />
-      )}
+        {canUseGameActions && activeSeat && (
+          <GameActions
+            drawOfferBy={drawOfferBy}
+            activeSeat={activeSeat}
+            drawOfferFromOpponent={Boolean(drawOfferFromOpponent)}
+            onResign={onResign}
+            onOfferOrAcceptDraw={onOfferOrAcceptDraw}
+            onDeclineDraw={onDeclineDraw}
+          />
+        )}
+        {showClocks && (
+          <SideClock
+            color="white"
+            seconds={clocks.white}
+            active={turn === 'white' && !gameOver && atLatest && clocksActive}
+            promotionsLeft={promotionsLeft.white}
+          />
+        )}
+      </div>
 
       {/* Promotion capacity */}
+      {!showInlinePromotions && (
       <div style={{ background: '#262422', border: '1px solid #3d3b38', borderRadius: '8px', padding: '8px' }}>
         <div style={{ fontSize: '10px', color: '#6e6b67', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
           Promotions left
@@ -168,10 +195,8 @@ export default function GameInfo({
           <PromotionCount label="White" color="white" value={promotionsLeft.white} active={turn === 'white' && !gameOver} />
           <PromotionCount label="Black" color="black" value={promotionsLeft.black} active={turn === 'black' && !gameOver} />
         </div>
-        <div style={{ fontSize: '10px', color: '#6e6b67', lineHeight: '1.35', marginTop: '6px' }}>
-          Choice is queen, rook, bishop, or knight. Piece type is not stock-limited.
-        </div>
       </div>
+      )}
 
       {/* Time control selector — only before game starts */}
       {!gameStarted && (
@@ -235,51 +260,152 @@ function PromotionCount({ label, color, value, active }: { label: string; color:
         <span style={{ fontSize: '11px', color: active ? '#a8d060' : '#9e9b96', fontWeight: 600 }}>{label}</span>
         <span style={{ fontSize: '12px', color: '#e0dbd4', fontWeight: 700 }}>{value}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '3px' }}>
         {PROMOTION_ROLES.map(role => (
-          <PieceIcon key={role} role={role} color={color} />
+          <PromotionOption key={role} role={role} color={color} />
         ))}
       </div>
     </div>
   );
 }
 
-function SideClock({ color, seconds, active }: { color: Color; seconds: number; active: boolean }) {
+function PromotionOption({ role, color }: { role: CGRole; color: Color }) {
+  return (
+    <span style={promotionOptionStyle} title={role}>
+      <PieceIcon role={role} color={color} />
+    </span>
+  );
+}
+
+function GameActions({
+  drawOfferBy,
+  activeSeat,
+  drawOfferFromOpponent,
+  onResign,
+  onOfferOrAcceptDraw,
+  onDeclineDraw,
+}: {
+  drawOfferBy: Color | null;
+  activeSeat: Color;
+  drawOfferFromOpponent: boolean;
+  onResign: () => Promise<void>;
+  onOfferOrAcceptDraw: () => Promise<void>;
+  onDeclineDraw: () => Promise<void>;
+}) {
+  const drawByMe = drawOfferBy === activeSeat;
+  const canCancelDraw = Boolean(drawOfferBy);
+  return (
+    <div style={actionRowStyle}>
+      <ActionIconButton
+        label="X"
+        title={drawByMe ? 'Cancel draw offer' : drawOfferFromOpponent ? 'Decline draw offer' : 'No draw offer to cancel'}
+        disabled={!canCancelDraw}
+        onClick={onDeclineDraw}
+      />
+      <ActionIconButton
+        label="1/2"
+        title={drawOfferFromOpponent ? 'Accept draw offer' : drawByMe ? 'Draw offer pending' : 'Offer draw'}
+        disabled={drawByMe}
+        active={drawOfferFromOpponent}
+        onClick={onOfferOrAcceptDraw}
+      />
+      <ActionIconButton
+        label="⚑"
+        title="Resign"
+        danger
+        onClick={onResign}
+      />
+    </div>
+  );
+}
+
+function ActionIconButton({
+  label,
+  title,
+  disabled = false,
+  danger = false,
+  active = false,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  disabled?: boolean;
+  danger?: boolean;
+  active?: boolean;
+  onClick: () => Promise<void>;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={() => void onClick()}
+      style={{
+        ...actionButtonStyle,
+        color: disabled ? '#5f5a52' : danger ? '#c97864' : active ? '#d8e7c0' : '#aaa49d',
+        background: active ? '#26321c' : 'transparent',
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SideClock({
+  color,
+  seconds,
+  active,
+  promotionsLeft,
+}: {
+  color: Color;
+  seconds: number;
+  active: boolean;
+  promotionsLeft: number;
+}) {
   const low = seconds > 0 && seconds < 30;
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr auto',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
       alignItems: 'center',
-      gap: '10px',
-      background: active ? '#2f2d29' : '#25231f',
-      border: `1px solid ${active ? '#4d493f' : '#33302c'}`,
-      borderRadius: '6px',
-      padding: '8px 10px',
+      gap: '14px',
+      background: active ? '#2f2d2a' : '#242320',
+      borderTop: color === 'white' ? '1px solid #34312c' : 0,
+      borderBottom: color === 'black' ? '1px solid #34312c' : 0,
+      padding: '10px 14px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
-        <span style={{
-          width: '9px',
-          height: '9px',
-          borderRadius: '50%',
-          background: active ? '#77a832' : '#5a554e',
-          flexShrink: 0,
-        }} />
-        <span style={{
-          color: active ? '#e0dbd4' : '#9b958e',
-          fontSize: '13px',
-          fontWeight: 700,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
-          {color === 'black' ? 'Black' : 'White'}
-        </span>
+      <div style={{ display: 'grid', gap: '6px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+          <span style={{
+            width: '9px',
+            height: '9px',
+            borderRadius: '50%',
+            background: active ? '#77a832' : '#5a554e',
+            flexShrink: 0,
+          }} />
+          <span style={{
+            color: active ? '#e0dbd4' : '#9b958e',
+            fontSize: '13px',
+            fontWeight: 700,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {color === 'black' ? 'Black' : 'White'}
+          </span>
+        </div>
+        <div style={inlinePromotionStyle}>
+          <span style={{ color: '#77716a', fontSize: '10px', fontWeight: 700 }}>{promotionsLeft} left</span>
+          {PROMOTION_ROLES.map(role => (
+            <PromotionOption key={role} role={role} color={color} />
+          ))}
+        </div>
       </div>
       <span style={{
         fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
         color: low ? '#ff9944' : active ? '#e8e2da' : '#b9b2aa',
-        fontSize: '30px',
+        fontSize: '48px',
         lineHeight: 1,
         fontWeight: 500,
         letterSpacing: 0,
@@ -290,6 +416,50 @@ function SideClock({ color, seconds, active }: { color: Color; seconds: number; 
     </div>
   );
 }
+
+const desktopGamePanelStyle: React.CSSProperties = {
+  background: '#1f1e1b',
+  border: '1px solid #34312c',
+  borderRadius: '6px',
+  overflow: 'hidden',
+  display: 'grid',
+  boxShadow: '0 3px 10px rgba(0, 0, 0, 0.22)',
+};
+
+const actionRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, 1fr)',
+  height: '54px',
+  background: '#23211e',
+  borderTop: '1px solid #34312c',
+};
+
+const actionButtonStyle: React.CSSProperties = {
+  border: 0,
+  borderRight: '1px solid #34312c',
+  fontSize: '24px',
+  fontWeight: 700,
+  lineHeight: 1,
+  letterSpacing: 0,
+};
+
+const inlinePromotionStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  minWidth: 0,
+};
+
+const promotionOptionStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: '22px',
+  height: '22px',
+  borderRadius: '4px',
+  background: '#191815',
+  border: '1px solid #34312c',
+};
 
 function PieceIcon({ role, color }: { role: CGRole; color: Color }) {
   return (

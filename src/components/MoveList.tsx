@@ -7,9 +7,10 @@ interface Props {
   onBack: () => void;
   onForward: () => void;
   onLast: () => void;
+  embedded?: boolean;
 }
 
-export default function MoveList({ notations, cursor, onFirst, onBack, onForward, onLast }: Props) {
+export default function MoveList({ notations, cursor, onFirst, onBack, onForward, onLast, embedded = false }: Props) {
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export default function MoveList({ notations, cursor, onFirst, onBack, onForward
   const canForward = cursor < notations.length;
 
   return (
-    <div style={panelStyle}>
+    <div style={embedded ? embeddedPanelStyle : panelStyle}>
       <div style={navStyle}>
         <NavButton label="|<" title="First position" disabled={!canBack} onClick={onFirst} />
         <NavButton label="<" title="Back" disabled={!canBack} onClick={onBack} />
@@ -125,6 +126,12 @@ const panelStyle: CSSProperties = {
   border: '1px solid #33302c',
   borderRadius: '6px',
   overflow: 'hidden',
+};
+
+const embeddedPanelStyle: CSSProperties = {
+  ...panelStyle,
+  border: 0,
+  borderRadius: 0,
 };
 
 const navStyle: CSSProperties = {

@@ -1,24 +1,15 @@
-import type { Color, CGRole } from '../types';
+import type { Color, PromotionRole } from '../types';
 
 interface Props {
   color: Color;
-  promotionsUsed: number;
-  onSelect: (role: CGRole) => void;
+  usedRoles: PromotionRole[];
+  onSelect: (role: PromotionRole) => void;
 }
 
-const CHOICES: CGRole[] = ['queen', 'rook', 'bishop', 'knight'];
+const CHOICES: PromotionRole[] = ['queen', 'rook', 'bishop', 'knight'];
 
-const SYMBOLS: Record<CGRole, { white: string; black: string }> = {
-  queen:  { white: '♕', black: '♛' },
-  rook:   { white: '♖', black: '♜' },
-  bishop: { white: '♗', black: '♝' },
-  knight: { white: '♘', black: '♞' },
-  king:   { white: '♔', black: '♚' },
-  pawn:   { white: '♙', black: '♟' },
-};
-
-export default function PromotionDialog({ color, promotionsUsed, onSelect }: Props) {
-  const remainingAfterThis = Math.max(0, 8 - promotionsUsed - 1);
+export default function PromotionDialog({ color, usedRoles, onSelect }: Props) {
+  const used = new Set(usedRoles);
 
   return (
     <div
@@ -39,45 +30,61 @@ export default function PromotionDialog({ color, promotionsUsed, onSelect }: Pro
         <div style={{ color: '#a8d060', fontWeight: 700, fontSize: '13px', marginBottom: '14px', letterSpacing: '0.05em' }}>
           PAWN PROMOTION
         </div>
-        <div style={{ color: '#9e9b96', fontSize: '11px', marginBottom: '12px' }}>
-          {remainingAfterThis} promotion{remainingAfterThis === 1 ? '' : 's'} left after this
-        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          {CHOICES.map(role => (
-            <button
-              key={role}
-              onClick={() => onSelect(role)}
-              style={{
-                width: '60px', height: '72px',
-                background: '#1a1816', border: '2px solid #3d3b38',
-                borderRadius: '8px', cursor: 'pointer',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: '4px',
-                transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = '#629924';
-                e.currentTarget.style.background = '#1e2a0f';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = '#3d3b38';
-                e.currentTarget.style.background = '#1a1816';
-              }}
-            >
-              <span style={{
-                fontSize: '32px', lineHeight: 1,
-                color: color === 'white' ? '#f0d9b5' : '#2a1a0e',
-                textShadow: color === 'black' ? '0 0 4px rgba(255,255,255,0.7)' : 'none',
-              }}>
-                {SYMBOLS[role][color]}
-              </span>
-              <span style={{ fontSize: '9px', color: '#6e6b67', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {role}
-              </span>
-            </button>
-          ))}
+          {CHOICES.map(role => {
+            const disabled = used.has(role);
+            return (
+              <button
+                key={role}
+                disabled={disabled}
+                onClick={() => onSelect(role)}
+                style={{
+                  width: '60px', height: '72px',
+                  background: disabled ? '#141311' : '#1a1816',
+                  border: `2px solid ${disabled ? '#2a2825' : '#3d3b38'}`,
+                  borderRadius: '8px',
+                  cursor: disabled ? 'default' : 'pointer',
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: '4px',
+                  position: 'relative',
+                  opacity: disabled ? 0.45 : 1,
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={e => {
+                  if (disabled) return;
+                  e.currentTarget.style.borderColor = '#629924';
+                  e.currentTarget.style.background = '#1e2a0f';
+                }}
+                onMouseLeave={e => {
+                  if (disabled) return;
+                  e.currentTarget.style.borderColor = '#3d3b38';
+                  e.currentTarget.style.background = '#1a1816';
+                }}
+              >
+                <span
+                  className="cg-wrap promotion-piece-icon"
+                  dangerouslySetInnerHTML={{ __html: `<piece class="${role} ${color}" aria-hidden="true"></piece>` }}
+                />
+                <span style={{ fontSize: '9px', color: '#6e6b67', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {role}
+                </span>
+                {disabled && <span style={disabledSlashStyle} aria-hidden="true" />}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+const disabledSlashStyle: React.CSSProperties = {
+  position: 'absolute',
+  left: '10px',
+  right: '10px',
+  top: '50%',
+  height: '2px',
+  background: '#b45345',
+  transform: 'rotate(-28deg)',
+  transformOrigin: 'center',
+};

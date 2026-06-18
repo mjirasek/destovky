@@ -20,6 +20,7 @@ export interface Deck {
 }
 
 export type CGRole = 'king' | 'queen' | 'rook' | 'bishop' | 'knight' | 'pawn';
+export type PromotionRole = 'queen' | 'rook' | 'bishop' | 'knight';
 export type CGKey = string;
 
 export interface CGPiece {
@@ -39,6 +40,7 @@ export interface GameState {
   whiteDecks: Deck;
   blackDecks: Deck;
   promotionCounts: Record<Color, number>;
+  promotionRolesUsed: Record<Color, PromotionRole[]>;
   turn: Color;
   turnMode: TurnMode;
   cardFlipped: boolean;

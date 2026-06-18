@@ -1,6 +1,8 @@
 import { createDeck } from './deck';
 import { legalPlacementSquares, legalChessMoves, isInCheck } from './chessEngine';
-import type { GameState, Color, CGPiece, CGRole, Square, TurnMode, Deck } from './types';
+import type { GameState, Color, CGPiece, PromotionRole, Square, TurnMode, Deck } from './types';
+
+const PROMOTION_ROLES: PromotionRole[] = ['queen', 'rook', 'bishop', 'knight'];
 
 function opposite(c: Color): Color {
   return c === 'white' ? 'black' : 'white';
@@ -16,6 +18,7 @@ export function createInitialState(): GameState {
     whiteDecks: makeDeck(),
     blackDecks: makeDeck(),
     promotionCounts: { white: 0, black: 0 },
+    promotionRolesUsed: { white: [], black: [] },
     turn: 'white',
     turnMode: 'must-place',
     cardFlipped: false,
@@ -110,6 +113,7 @@ export function makeMove(state: GameState, from: Square, to: Square): GameState 
     piece.role === 'pawn' &&
     ((piece.color === 'white' && rank === 7) || (piece.color === 'black' && rank === 0))
   ) {
+    if (availablePromotionRoles(state, piece.color).length === 0) return state;
     return {
       ...state,
       board: newBoard,
@@ -130,12 +134,13 @@ export function makeMove(state: GameState, from: Square, to: Square): GameState 
   });
 }
 
-export function completePromotion(state: GameState, role: CGRole): GameState {
+export function completePromotion(state: GameState, role: PromotionRole): GameState {
   if (!state.pendingPromotion) return state;
   const { to } = state.pendingPromotion;
   const newBoard = new Map(state.board);
   const piece = newBoard.get(to);
   if (!piece) return state;
+  if (!availablePromotionRoles(state, piece.color).includes(role)) return state;
   newBoard.set(to, { ...piece, role });
   const promotedColor = piece.color;
   return resolveNextTurn({
@@ -145,6 +150,10 @@ export function completePromotion(state: GameState, role: CGRole): GameState {
       ...state.promotionCounts,
       [promotedColor]: state.promotionCounts[promotedColor] + 1,
     },
+    promotionRolesUsed: {
+      ...state.promotionRolesUsed,
+      [promotedColor]: [...state.promotionRolesUsed[promotedColor], role],
+    },
     turn: opposite(state.turn),
     pendingPromotion: null,
     cardFlipped: false,
@@ -153,11 +162,16 @@ export function completePromotion(state: GameState, role: CGRole): GameState {
   });
 }
 
+export function availablePromotionRoles(state: GameState, color: Color): PromotionRole[] {
+  const used = new Set(state.promotionRolesUsed[color]);
+  return PROMOTION_ROLES.filter(role => !used.has(role));
+}
+
 function resolveNextTurn(state: GameState): GameState {
   const { turn } = state;
   const myKingPlaced = turn === 'white' ? state.whiteKingPlaced : state.blackKingPlaced;
   const inCheck = isInCheck(turn, state.board);
-  const legalMoves = myKingPlaced ? legalChessMoves(turn, state.board) : new Map<Square, Square[]>();
+  const legalMoves = myKingPlaced ? legalMovesForState(state, turn) : new Map<Square, Square[]>();
   const myDeck = turn === 'white' ? state.whiteDecks : state.blackDecks;
   const hasCards = myDeck.pile.length > 0;
 
@@ -181,4 +195,22 @@ function resolveNextTurn(state: GameState): GameState {
   }
 
   return { ...state, inCheck, legalMoves, legalPlacementSquares: [], turnMode, pendingPromotion: null };
+}
+
+export function legalMovesForState(state: GameState, color: Color): Map<Square, Square[]> {
+  const legalMoves = legalChessMoves(color, state.board);
+  if (availablePromotionRoles(state, color).length > 0) return legalMoves;
+
+  const filtered = new Map<Square, Square[]>();
+  for (const [from, destinations] of legalMoves) {
+    const piece = state.board.get(from);
+    const filteredDestinations = destinations.filter(to => {
+      if (piece?.role !== 'pawn') return true;
+      const rank = to >> 3;
+      return !((piece.color === 'white' && rank === 7) || (piece.color === 'black' && rank === 0));
+    });
+    if (filteredDestinations.length > 0) filtered.set(from, filteredDestinations);
+  }
+
+  return filtered;
 }

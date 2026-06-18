@@ -15,5 +15,15 @@ describe('game serialization', () => {
     expect(roundTripped.whiteDecks.pile.length).toBe(placed.whiteDecks.pile.length);
     expect(roundTripped.blackDecks.pile.length).toBe(placed.blackDecks.pile.length);
     expect(roundTripped.promotionCounts).toEqual(placed.promotionCounts);
+    expect(roundTripped.promotionRolesUsed).toEqual(placed.promotionRolesUsed);
+  });
+
+  it('defaults promotion role usage when loading older saved states', () => {
+    const serialized = serializeGameState(createInitialState());
+    delete serialized.promotionRolesUsed;
+
+    const roundTripped = deserializeGameState(serialized);
+
+    expect(roundTripped.promotionRolesUsed).toEqual({ white: [], black: [] });
   });
 });

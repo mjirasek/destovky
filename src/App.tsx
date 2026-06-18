@@ -24,7 +24,7 @@ import {
   type GameRow,
   type Profile,
 } from './multiplayer';
-import type { GameState, Square, CGRole, Color, CardType, CGPiece } from './types';
+import type { GameState, Square, Color, CardType, CGPiece, PromotionRole } from './types';
 import type { User } from '@supabase/supabase-js';
 
 // ── Notation helpers ──────────────────────────────────────────────────────────
@@ -590,7 +590,7 @@ export default function App() {
     else pushSnapshot(next, notation, movedColor);
   }, [interactive, liveGame, pushSnapshot]);
 
-  const handlePromotion = useCallback((role: CGRole) => {
+  const handlePromotion = useCallback((role: PromotionRole) => {
     const movedColor = liveGame.turn;
     const notation = pendingNotation + '=' + SYM[role][movedColor];
     const next = completePromotion(liveGame, role);
@@ -620,7 +620,7 @@ export default function App() {
       {liveGame.pendingPromotion && atLatest && (
         <PromotionDialog
           color={liveGame.turn}
-          promotionsUsed={liveGame.promotionCounts[liveGame.turn]}
+          usedRoles={liveGame.promotionRolesUsed[liveGame.turn]}
           onSelect={handlePromotion}
         />
       )}

@@ -1,4 +1,4 @@
-import type { GameState, CardType, CGRole, Color } from '../types';
+import type { GameState, CardType, CGRole, Color, PromotionRole } from '../types';
 import MoveList from './MoveList';
 
 interface TimeControl { initial: number; increment: number; label: string; }
@@ -31,7 +31,7 @@ const CARD_NAMES: Record<CardType, string> = {
   'bishop-light': 'Light Bishop', 'bishop-dark': 'Dark Bishop', pawn: 'Pawn',
 };
 
-const PROMOTION_ROLES: CGRole[] = ['queen', 'rook', 'bishop', 'knight'];
+const PROMOTION_ROLES: PromotionRole[] = ['queen', 'rook', 'bishop', 'knight'];
 
 function formatClock(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -61,7 +61,7 @@ export default function GameInfo({
   onOfferOrAcceptDraw,
   onDeclineDraw,
 }: Props) {
-  const { turn, turnMode, cardFlipped, gameOver, winner, inCheck, whiteDecks, blackDecks } = state;
+  const { turn, turnMode, cardFlipped, gameOver, winner, inCheck, whiteDecks, blackDecks, promotionRolesUsed } = state;
   const myDeck = turn === 'white' ? whiteDecks : blackDecks;
   const hasCards = myDeck.pile.length > 0;
   const turnLabel = turn === 'white' ? 'White' : 'Black';
@@ -147,6 +147,7 @@ export default function GameInfo({
           seconds={clocks.black}
           showClock={showClocks}
           active={turn === 'black' && !gameOver && atLatest && clocksActive}
+          usedPromotionRoles={promotionRolesUsed.black}
         />
         <MoveList
           notations={notations}
@@ -172,6 +173,7 @@ export default function GameInfo({
           seconds={clocks.white}
           showClock={showClocks}
           active={turn === 'white' && !gameOver && atLatest && clocksActive}
+          usedPromotionRoles={promotionRolesUsed.white}
         />
       </div>
 
@@ -224,21 +226,29 @@ export default function GameInfo({
   );
 }
 
-function PromotionOption({ role, color }: { role: CGRole; color: Color }) {
+function PromotionOption({ role, color, used = false }: { role: CGRole; color: Color; used?: boolean }) {
   return (
-    <span style={promotionOptionStyle} title={role}>
+    <span
+      style={{
+        ...promotionOptionStyle,
+        opacity: used ? 0.42 : 1,
+      }}
+      title={used ? `${role} used` : role}
+    >
       <PieceIcon role={role} color={color} />
+      {used && <span style={smallUsedSlashStyle} aria-hidden="true" />}
     </span>
   );
 }
 
-function PromotionBox({ color }: { color: Color }) {
+function PromotionBox({ color, usedRoles }: { color: Color; usedRoles: PromotionRole[] }) {
+  const used = new Set(usedRoles);
   return (
     <div style={promotionBoxStyle}>
       <div style={promotionBoxTitleStyle}>Promotions</div>
       <div style={promotionChoicesStyle}>
         {PROMOTION_ROLES.map(role => (
-          <PromotionOption key={role} role={role} color={color} />
+          <PromotionOption key={role} role={role} color={color} used={used.has(role)} />
         ))}
       </div>
     </div>
@@ -349,11 +359,13 @@ function PlayerSideBand({
   seconds,
   showClock,
   active,
+  usedPromotionRoles,
 }: {
   color: Color;
   seconds: number;
   showClock: boolean;
   active: boolean;
+  usedPromotionRoles: PromotionRole[];
 }) {
   const low = seconds > 0 && seconds < 30;
   return (
@@ -387,7 +399,7 @@ function PlayerSideBand({
             {color === 'black' ? 'Black' : 'White'}
           </span>
         </div>
-        <PromotionBox color={color} />
+        <PromotionBox color={color} usedRoles={usedPromotionRoles} />
       </div>
       {showClock && (
       <span style={{
@@ -507,6 +519,7 @@ const promotionChoicesStyle: React.CSSProperties = {
 };
 
 const promotionOptionStyle: React.CSSProperties = {
+  position: 'relative',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -515,6 +528,17 @@ const promotionOptionStyle: React.CSSProperties = {
   borderRadius: '4px',
   background: '#191815',
   border: '1px solid #34312c',
+};
+
+const smallUsedSlashStyle: React.CSSProperties = {
+  position: 'absolute',
+  left: '3px',
+  right: '3px',
+  top: '50%',
+  height: '2px',
+  background: '#b45345',
+  transform: 'rotate(-28deg)',
+  transformOrigin: 'center',
 };
 
 function PieceIcon({ role, color }: { role: CGRole; color: Color }) {

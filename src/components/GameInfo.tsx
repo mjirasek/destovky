@@ -90,7 +90,7 @@ export default function GameInfo({
 
   const isViewingHistory = cursor < notations.length;
   const drawOfferFromOpponent = activeSeat && drawOfferBy && drawOfferBy !== activeSeat;
-  const canUseGameActions = Boolean(activeSeat) && !gameOver && atLatest;
+  const canShowGameActions = !gameOver && atLatest;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '420px' }}>
@@ -157,7 +157,7 @@ export default function GameInfo({
           onLast={onLast}
           embedded
         />
-        {canUseGameActions && activeSeat && (
+        {canShowGameActions && (
           <GameActions
             drawOfferBy={drawOfferBy}
             activeSeat={activeSeat}
@@ -254,48 +254,53 @@ function GameActions({
   onDeclineDraw,
 }: {
   drawOfferBy: Color | null;
-  activeSeat: Color;
+  activeSeat: Color | null;
   drawOfferFromOpponent: boolean;
   onResign: () => Promise<void>;
   onOfferOrAcceptDraw: () => Promise<void>;
   onDeclineDraw: () => Promise<void>;
 }) {
-  const drawByMe = drawOfferBy === activeSeat;
-  const canCancelDraw = Boolean(drawOfferBy);
+  const hasActiveSeat = Boolean(activeSeat);
+  const drawByMe = Boolean(activeSeat && drawOfferBy === activeSeat);
+  const canCancelDraw = Boolean(activeSeat && drawOfferBy);
   return (
     <div style={actionRowStyle}>
       <ActionIconButton
-        label="X"
-        title={drawByMe ? 'Cancel draw offer' : drawOfferFromOpponent ? 'Decline draw offer' : 'No draw offer to cancel'}
+        title={hasActiveSeat ? drawByMe ? 'Cancel draw offer' : drawOfferFromOpponent ? 'Decline draw offer' : 'No draw offer to cancel' : 'Draw controls are available in challenge games'}
         disabled={!canCancelDraw}
         onClick={onDeclineDraw}
-      />
+      >
+        X
+      </ActionIconButton>
       <ActionIconButton
-        label="1/2"
-        title={drawOfferFromOpponent ? 'Accept draw offer' : drawByMe ? 'Draw offer pending' : 'Offer draw'}
-        disabled={drawByMe}
+        title={hasActiveSeat ? drawOfferFromOpponent ? 'Accept draw offer' : drawByMe ? 'Draw offer pending' : 'Offer draw' : 'Draw controls are available in challenge games'}
+        disabled={!hasActiveSeat || drawByMe}
         active={drawOfferFromOpponent}
         onClick={onOfferOrAcceptDraw}
-      />
+      >
+        <DrawIcon />
+      </ActionIconButton>
       <ActionIconButton
-        label="⚑"
-        title="Resign"
+        title={hasActiveSeat ? 'Resign' : 'Resign is available in challenge games'}
+        disabled={!hasActiveSeat}
         danger
         onClick={onResign}
-      />
+      >
+        <ResignIcon />
+      </ActionIconButton>
     </div>
   );
 }
 
 function ActionIconButton({
-  label,
+  children,
   title,
   disabled = false,
   danger = false,
   active = false,
   onClick,
 }: {
-  label: string;
+  children: React.ReactNode;
   title: string;
   disabled?: boolean;
   danger?: boolean;
@@ -315,8 +320,27 @@ function ActionIconButton({
         cursor: disabled ? 'default' : 'pointer',
       }}
     >
-      {label}
+      {children}
     </button>
+  );
+}
+
+function DrawIcon() {
+  return (
+    <span style={drawIconStyle} aria-hidden="true">
+      <span>1</span>
+      <span style={drawSlashStyle}>/</span>
+      <span>2</span>
+    </span>
+  );
+}
+
+function ResignIcon() {
+  return (
+    <span style={resignIconStyle} aria-hidden="true">
+      <span style={resignPoleStyle} />
+      <span style={resignFlagStyle} />
+    </span>
   );
 }
 
@@ -400,12 +424,59 @@ const actionRowStyle: React.CSSProperties = {
 };
 
 const actionButtonStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: 0,
   borderRight: '1px solid #34312c',
   fontSize: '24px',
   fontWeight: 700,
   lineHeight: 1,
   letterSpacing: 0,
+};
+
+const drawIconStyle: React.CSSProperties = {
+  display: 'inline-grid',
+  gridTemplateColumns: 'auto auto auto',
+  alignItems: 'center',
+  gap: '1px',
+  fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+  fontSize: '24px',
+  fontWeight: 800,
+  lineHeight: 1,
+};
+
+const drawSlashStyle: React.CSSProperties = {
+  color: 'currentColor',
+  opacity: 0.75,
+  transform: 'translateY(-1px)',
+};
+
+const resignIconStyle: React.CSSProperties = {
+  position: 'relative',
+  display: 'inline-block',
+  width: '24px',
+  height: '26px',
+};
+
+const resignPoleStyle: React.CSSProperties = {
+  position: 'absolute',
+  left: '6px',
+  top: '3px',
+  width: '3px',
+  height: '21px',
+  borderRadius: '2px',
+  background: 'currentColor',
+};
+
+const resignFlagStyle: React.CSSProperties = {
+  position: 'absolute',
+  left: '8px',
+  top: '4px',
+  width: '14px',
+  height: '10px',
+  borderRadius: '2px 2px 2px 0',
+  background: 'currentColor',
 };
 
 const promotionBoxStyle: React.CSSProperties = {

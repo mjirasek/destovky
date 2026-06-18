@@ -4,6 +4,6 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // GitHub Pages serves this project under /raindrop_chess/; locally serve from root.
-  base: process.env.GITHUB_ACTIONS ? '/raindrop_chess/' : '/',
+  // GitHub Pages serves this project under /destovky/; locally serve from root.
+  base: process.env.GITHUB_ACTIONS ? '/destovky/' : '/',
 })

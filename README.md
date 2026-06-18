@@ -50,9 +50,9 @@ npm run preview
 
 ## Deployment
 
-Pushes to `main` deploy through GitHub Pages. The Vite build uses `/raindrop_chess/` as its production base path, so the expected project URL is:
+Pushes to `main` deploy through GitHub Pages. The Vite build uses `/destovky/` as its production base path, so the expected project URL is:
 
-`https://michaeljirasek.com/raindrop_chess/`
+`https://michaeljirasek.com/destovky/`
 
 The Supabase URL and publishable browser key are in `.env.production` so GitHub Pages builds with multiplayer enabled. Do not put a Supabase service-role key in this repo or in the frontend build.
 

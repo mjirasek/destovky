@@ -50,7 +50,7 @@ export default function MultiplayerPanel({
   onClearQueue,
   onLeaveGame,
 }: Props) {
-  const [email, setEmail] = useState('misa@raindrop.local');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [opponentId, setOpponentId] = useState('');
 

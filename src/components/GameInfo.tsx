@@ -118,7 +118,7 @@ export default function GameInfo({
         <div style={{ background: '#262421', border: '1px solid #3a3732', borderRadius: '6px', padding: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', marginBottom: '6px' }}>
             <span style={{ fontSize: '12px', color: '#8f8981', fontWeight: 700 }}>
-              {timeControl.label} · Raindrop
+              {timeControl.label} · Destovky
             </span>
             <span style={{ fontWeight: 700, fontSize: '12px', color: '#d5cec5' }}>{turnLabel} to move</span>
           </div>

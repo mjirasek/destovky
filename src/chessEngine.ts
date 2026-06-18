@@ -1,7 +1,7 @@
 /**
  * Chess engine utilities built on top of chessops low-level primitives.
  * Handles attack detection, legal move generation, and check/checkmate
- * for the non-standard Raindrop Chess positions (e.g. board with only
+ * for the non-standard Destovky positions (e.g. board with only
  * one king, or no kings at all).
  */
 
@@ -235,7 +235,7 @@ export function isCheckmate(color: Color, pieces: Map<Square, CGPiece>): boolean
   const moves = legalChessMoves(color, pieces);
   if (moves.size > 0) return false;
 
-  // Also check: can any piece be PLACED to block? In Raindrop Chess a player
+  // Also check: can any piece be PLACED to block? In Destovky a player
   // can always choose to place from their deck to resolve check, but only if
   // the king is already placed. Checkmate means no placement can help either.
   // We don't evaluate that here — the game loop handles it separately.

@@ -1,10 +1,10 @@
-# Raindrop Chess
+# Destovky
 
-A browser-based implementation of [Raindrop Chess](https://raindropchess.com/game-explanation/) — a card-driven chess variant where players reveal and place pieces from a shuffled hand before standard chess moves begin.
+A browser-based card-driven chess variant where players reveal and place pieces from a shuffled deck before standard chess moves begin.
 
 ## How to Play
 
-For the full implemented rules, including check handling and promotion behavior, see [docs/RAINDROP_RULES.md](docs/RAINDROP_RULES.md).
+For the full implemented rules, including check handling and promotion behavior, see [docs/DESTOVKY_RULES.md](docs/DESTOVKY_RULES.md).
 
 ### Setup
 Each player starts with a shuffled deck of 16 cards:
@@ -72,4 +72,4 @@ This project uses two open-source libraries from the [Lichess](https://lichess.o
 
 This project is released under GPL-3.0 in compliance with those licences. It is not affiliated with, endorsed by, or sponsored by Lichess or its team.
 
-Raindrop Chess rules © their respective creators. See [raindropchess.com](https://raindropchess.com/game-explanation/) for the official rules.
+The game rules used by this app are documented in [docs/DESTOVKY_RULES.md](docs/DESTOVKY_RULES.md).

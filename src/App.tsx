@@ -683,7 +683,7 @@ export default function App() {
         {/* Header — rigid, never moves */}
         <header style={{ flexShrink: 0, background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px' }}>
           <KnightLogo />
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: '16px' }}>Raindrop Chess</span>
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: '16px' }}>Destovky</span>
           <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '10px', fontWeight: 600, padding: '1px 6px', marginLeft: 'auto' }}>hot seat</span>
         </header>
 
@@ -720,7 +720,7 @@ export default function App() {
       <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <KnightLogo />
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px', letterSpacing: '0.03em' }}>Raindrop Chess</span>
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px', letterSpacing: '0.03em' }}>Destovky</span>
           <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '11px', fontWeight: 600, padding: '2px 8px' }}>hot seat</span>
         </div>
         <span style={{ fontSize: '11px', color: '#6e6b67' }}>Powered by chessground &amp; chessops</span>

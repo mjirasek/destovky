@@ -108,11 +108,11 @@ For a small private group, create five accounts in Supabase Auth:
 
 Use real passwords stored only in the Supabase dashboard or password manager. If Supabase requires email-shaped usernames, use aliases such as:
 
-- `kacka@raindrop.local`
-- `vlada@raindrop.local`
-- `misa@raindrop.local`
-- `verca@raindrop.local`
-- `kp@raindrop.local`
+- `kacka@destovky.local`
+- `vlada@destovky.local`
+- `misa@destovky.local`
+- `verca@destovky.local`
+- `kp@destovky.local`
 
 Disable public sign-up if this should stay private.
 

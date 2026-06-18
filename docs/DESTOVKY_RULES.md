@@ -1,6 +1,6 @@
-# Raindrop Chess Rules
+# Destovky Rules
 
-This document describes the rules used by this app. Raindrop Chess starts from an empty chessboard. Players reveal cards from their own shuffled piece decks and decide where those pieces enter the board.
+This document describes the rules used by this app. Destovky starts from an empty chessboard. Players reveal cards from their own shuffled piece decks and decide where those pieces enter the board.
 
 ## Components
 

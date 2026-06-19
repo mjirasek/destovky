@@ -89,6 +89,44 @@ export async function signIn(email: string, password: string): Promise<User> {
   return data.user;
 }
 
+export async function registerAccount(
+  email: string,
+  password: string,
+  username: string,
+  displayName: string,
+): Promise<{ user: User | null; needsConfirmation: boolean }> {
+  const client = requireSupabase();
+  const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+  const cleanDisplayName = (displayName.trim() || cleanUsername || email.split('@')[0]).slice(0, 40);
+  if (!cleanUsername) throw new Error('Username must use letters, numbers, or underscores');
+
+  const { data, error } = await client.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      data: {
+        username: cleanUsername,
+        display_name: cleanDisplayName,
+      },
+    },
+  });
+  if (error) throw error;
+
+  if (data.user && data.session) {
+    const { error: profileError } = await client
+      .from('profiles')
+      .upsert({
+        id: data.user.id,
+        username: cleanUsername,
+        display_name: cleanDisplayName,
+        active: true,
+      }, { onConflict: 'id' });
+    if (profileError) throw profileError;
+  }
+
+  return { user: data.user, needsConfirmation: Boolean(data.user && !data.session) };
+}
+
 export async function signOut(): Promise<void> {
   const client = requireSupabase();
   const { error } = await client.auth.signOut();

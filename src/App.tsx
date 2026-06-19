@@ -22,6 +22,7 @@ import {
   listUserGames,
   loadGame,
   replaceGameForChallenge,
+  registerAccount,
   sendGameMessage,
   sendLobbyMessage,
   signIn,
@@ -141,6 +142,7 @@ const TIME_PRESETS = [
 interface TimeControl { initial: number; increment: number; label: string; }
 type AppView = 'lobby' | 'game';
 type LocalMode = 'hotseat' | 'computer';
+type AuthMode = 'sign-in' | 'register';
 
 // ── Responsive hook ───────────────────────────────────────────────────────────
 
@@ -225,6 +227,13 @@ export default function App() {
   const [appView, setAppView] = useState<AppView>('lobby');
   const [localMode, setLocalMode] = useState<LocalMode>('hotseat');
   const [engineStatus, setEngineStatus] = useState('');
+  const [playMenuOpen, setPlayMenuOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authDisplayName, setAuthDisplayName] = useState('');
+  const [authStatus, setAuthStatus] = useState('');
   const initial = createInitialState();
   const [liveGame, setLiveGame] = useState<GameState>(initial);
   const [snapshots, setSnapshots] = useState<GameState[]>([initial]);
@@ -256,6 +265,7 @@ export default function App() {
 
   const atLatest = snapshotCursor === null;
   const displayGame = atLatest ? liveGame : snapshots[snapshotCursor!];
+  const currentProfile = mpUser ? profiles.find(profile => profile.id === mpUser.id) : null;
   const onlineSeat: Color | null =
     activeGame && mpUser?.id === activeGame.white_user_id ? 'white'
       : activeGame && mpUser?.id === activeGame.black_user_id ? 'black'
@@ -663,13 +673,53 @@ export default function App() {
 
   const handleMpSignIn = useCallback(async (email: string, password: string) => {
     setMpStatus('Signing in...');
+    setAuthStatus('Signing in...');
     const user = await signIn(email, password);
     setGuestName(null);
     setMpUser(user);
     setMpStatus('Signed in');
+    setAuthStatus('Signed in');
+    setAuthMode(null);
+    setAuthPassword('');
     setAppView('lobby');
     await refreshMultiplayer();
   }, [refreshMultiplayer]);
+
+  const handleHeaderSignIn = useCallback(async () => {
+    try {
+      await handleMpSignIn(authEmail, authPassword);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not sign in';
+      setAuthStatus(message);
+      setMpStatus(message);
+    }
+  }, [authEmail, authPassword, handleMpSignIn]);
+
+  const handleRegister = useCallback(async () => {
+    try {
+      setAuthStatus('Creating account...');
+      const result = await registerAccount(authEmail, authPassword, authUsername, authDisplayName);
+      if (result.needsConfirmation) {
+        setAuthStatus('Account created. Check email, then sign in.');
+        setAuthMode('sign-in');
+        setAuthPassword('');
+        return;
+      }
+      if (result.user) {
+        setMpUser(result.user);
+        setAuthStatus('Registered and signed in');
+        setAuthMode(null);
+        setAuthPassword('');
+        setGuestName(null);
+        setAppView('lobby');
+        await refreshMultiplayer();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not register';
+      setAuthStatus(message);
+      setMpStatus(message);
+    }
+  }, [authDisplayName, authEmail, authPassword, authUsername, refreshMultiplayer]);
 
   const handleMpSignOut = useCallback(async () => {
     await signOut();
@@ -684,6 +734,8 @@ export default function App() {
     setAppView('lobby');
     setGameSyncStatus('');
     setMpStatus('Signed out');
+    setAuthStatus('');
+    setAuthMode(null);
   }, []);
 
   const handleCreateChallenge = useCallback(async (opponentId: string) => {
@@ -972,34 +1024,164 @@ export default function App() {
   );
 
   // ── MOBILE layout ────────────────────────────────────────────────────────────
+  const authName = currentProfile?.display_name ?? currentProfile?.username ?? mpUser?.email ?? '';
   const appHeader = (
-    <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 24px', gap: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <header style={{
+      position: 'relative',
+      background: '#262422',
+      borderBottom: '1px solid #3d3b38',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: isMobile ? '8px 12px' : '10px 24px',
+      gap: '12px',
+      zIndex: 20,
+    }}>
+      <button
+        type="button"
+        onClick={() => {
+          setAppView('lobby');
+          setPlayMenuOpen(false);
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          minWidth: 0,
+          background: 'transparent',
+          border: 0,
+          padding: 0,
+          cursor: 'pointer',
+        }}
+      >
         <KnightLogo />
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px', letterSpacing: '0.03em' }}>Destovky</span>
-      </div>
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: isMobile ? '16px' : '18px', letterSpacing: '0.03em' }}>Destovky</span>
+      </button>
+
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: 'auto' }}>
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode(null);
+              setPlayMenuOpen(open => !open);
+            }}
+            style={{
+              background: playMenuOpen ? '#1e2a0f' : '#1a1816',
+              color: playMenuOpen ? '#a8d060' : '#d0c9bf',
+              border: `1px solid ${playMenuOpen ? '#3a5a12' : '#3d3b38'}`,
+              borderRadius: '6px',
+              padding: '6px 10px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Play
+          </button>
+          {playMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '34px',
+              left: 0,
+              width: '220px',
+              background: '#2b2926',
+              border: '1px solid #45413b',
+              borderRadius: '7px',
+              boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
+              padding: '6px',
+              display: 'grid',
+              gap: '4px',
+            }}>
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Random legal engine" />
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartLocalGame(); }} title="Playground" detail="Local board practice" />
+              <HeaderMenuButton
+                onClick={() => {
+                  setPlayMenuOpen(false);
+                  setAppView('lobby');
+                  setMpStatus(mpUser ? 'Choose a player to challenge' : 'Sign in to challenge players');
+                }}
+                title="Challenge player"
+                detail={mpUser ? 'Pick from online players' : 'Requires sign in'}
+              />
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); setAppView('lobby'); }} title="Lobby" detail="Players, chat, games" />
+            </div>
+          )}
+        </div>
         <button type="button" onClick={() => setAppView('lobby')} style={{
-          background: appView === 'lobby' ? '#1e2a0f' : '#1a1816',
+          background: appView === 'lobby' ? '#1e2a0f' : 'transparent',
           color: appView === 'lobby' ? '#a8d060' : '#9e9b96',
-          border: `1px solid ${appView === 'lobby' ? '#3a5a12' : '#3d3b38'}`,
+          border: `1px solid ${appView === 'lobby' ? '#3a5a12' : 'transparent'}`,
           borderRadius: '6px',
           padding: '6px 9px',
           fontSize: '12px',
           fontWeight: 800,
           cursor: 'pointer',
         }}>Lobby</button>
-        <button type="button" onClick={() => setAppView('game')} style={{
-          background: appView === 'game' ? '#1e2a0f' : '#1a1816',
-          color: appView === 'game' ? '#a8d060' : '#9e9b96',
-          border: `1px solid ${appView === 'game' ? '#3a5a12' : '#3d3b38'}`,
-          borderRadius: '6px',
-          padding: '6px 9px',
-          fontSize: '12px',
-          fontWeight: 800,
-          cursor: 'pointer',
-        }}>Game</button>
       </nav>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+        {mpUser ? (
+          <>
+            <span style={{ color: '#9e9b96', fontSize: '12px', maxWidth: isMobile ? '110px' : '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              signed in as <strong style={{ color: '#d0c9bf' }}>{authName}</strong>
+            </span>
+            <button type="button" onClick={() => void handleMpSignOut()} style={headerGhostButtonStyle}>Sign out</button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => { setPlayMenuOpen(false); setAuthMode('sign-in'); }} style={headerGhostButtonStyle}>Sign in</button>
+            <button type="button" onClick={() => { setPlayMenuOpen(false); setAuthMode('register'); }} style={headerPrimaryButtonStyle}>Register</button>
+          </>
+        )}
+        {authMode && !mpUser && (
+          <div style={{
+            position: 'absolute',
+            top: '38px',
+            right: 0,
+            width: isMobile ? 'calc(100vw - 24px)' : '300px',
+            background: '#2b2926',
+            border: '1px solid #45413b',
+            borderRadius: '7px',
+            boxShadow: '0 10px 24px rgba(0,0,0,0.38)',
+            padding: '10px',
+            display: 'grid',
+            gap: '8px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <strong style={{ color: '#d0c9bf', fontSize: '13px' }}>{authMode === 'sign-in' ? 'Sign in' : 'Register'}</strong>
+              <button type="button" onClick={() => setAuthMode(null)} style={headerGhostButtonStyle}>Close</button>
+            </div>
+            {authMode === 'register' && (
+              <>
+                <input value={authUsername} onChange={e => setAuthUsername(e.target.value)} placeholder="username" style={headerInputStyle} />
+                <input value={authDisplayName} onChange={e => setAuthDisplayName(e.target.value)} placeholder="display name" style={headerInputStyle} />
+              </>
+            )}
+            <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="email" style={headerInputStyle} />
+            <input
+              value={authPassword}
+              onChange={e => setAuthPassword(e.target.value)}
+              onKeyDown={e => {
+                if (e.key !== 'Enter') return;
+                void (authMode === 'sign-in' ? handleHeaderSignIn() : handleRegister());
+              }}
+              placeholder="password"
+              type="password"
+              style={headerInputStyle}
+            />
+            <button
+              type="button"
+              onClick={() => void (authMode === 'sign-in' ? handleHeaderSignIn() : handleRegister())}
+              disabled={!hasSupabaseConfig}
+              style={headerPrimaryButtonStyle}
+            >
+              {authMode === 'sign-in' ? 'Sign in' : 'Create account'}
+            </button>
+            {authStatus && <span style={{ color: '#c8a84a', fontSize: '11px', lineHeight: 1.35 }}>{authStatus}</span>}
+          </div>
+        )}
+      </div>
     </header>
   );
 
@@ -1131,6 +1313,73 @@ export default function App() {
 }
 
 // ── Mobile player row ─────────────────────────────────────────────────────────
+
+function HeaderMenuButton({
+  title,
+  detail,
+  onClick,
+}: {
+  title: string;
+  detail: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'grid',
+        gap: '2px',
+        textAlign: 'left',
+        background: '#211f1c',
+        color: '#d0c9bf',
+        border: '1px solid #37332e',
+        borderRadius: '5px',
+        padding: '8px',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ fontSize: '12px', fontWeight: 800 }}>{title}</span>
+      <span style={{ color: '#8f8981', fontSize: '11px' }}>{detail}</span>
+    </button>
+  );
+}
+
+const headerGhostButtonStyle: React.CSSProperties = {
+  background: '#1a1816',
+  color: '#bcb5ad',
+  border: '1px solid #3d3b38',
+  borderRadius: '6px',
+  padding: '6px 9px',
+  fontSize: '12px',
+  fontWeight: 800,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const headerPrimaryButtonStyle: React.CSSProperties = {
+  background: '#1e2a0f',
+  color: '#a8d060',
+  border: '1px solid #3a5a12',
+  borderRadius: '6px',
+  padding: '6px 10px',
+  fontSize: '12px',
+  fontWeight: 800,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const headerInputStyle: React.CSSProperties = {
+  minWidth: 0,
+  width: '100%',
+  boxSizing: 'border-box',
+  background: '#1a1816',
+  color: '#e0dbd4',
+  border: '1px solid #3d3b38',
+  borderRadius: '6px',
+  padding: '8px',
+  fontSize: '12px',
+};
 
 function MobilePlayerRow({ color, active }: { color: Color; active: boolean }) {
   return (

@@ -48,6 +48,14 @@ export interface GameMessage {
   profile?: Profile;
 }
 
+export interface LobbyMessage {
+  id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  profile?: Profile;
+}
+
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured');
   return supabase;
@@ -223,6 +231,30 @@ export async function listGameMessages(challengeId: string): Promise<GameMessage
     .limit(80);
   if (error) throw error;
   return data ?? [];
+}
+
+export async function listLobbyMessages(): Promise<LobbyMessage[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('lobby_messages')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function sendLobbyMessage(userId: string, body: string): Promise<LobbyMessage> {
+  const client = requireSupabase();
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('Message is empty');
+  const { data, error } = await client
+    .from('lobby_messages')
+    .insert({ user_id: userId, body: trimmed.slice(0, 500) })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export async function sendGameMessage(challengeId: string, userId: string, body: string): Promise<GameMessage> {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Challenge, GameRow, Profile } from '../multiplayer';
+import type { Challenge, GameRow, LobbyMessage, Profile } from '../multiplayer';
+import LobbyChat from './LobbyChat';
 
 interface Props {
   configured: boolean;
@@ -9,9 +10,15 @@ interface Props {
   challenges: Challenge[];
   games: GameRow[];
   activeGame: GameRow | null;
+  guestName: string | null;
+  onlineUserIds: string[];
+  lobbyMessages: LobbyMessage[];
+  lobbyChatStatus: string;
   status: string;
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignOut: () => Promise<void>;
+  onStartGuest: (name: string) => void;
+  onLeaveGuest: () => void;
   onCreateChallenge: (opponentId: string) => Promise<void>;
   onAcceptChallenge: (challenge: Challenge) => Promise<void>;
   onDeclineChallenge: (challengeId: string) => Promise<void>;
@@ -19,6 +26,7 @@ interface Props {
   onRefresh: () => Promise<void>;
   onClearQueue: () => Promise<void>;
   onStartLocalGame: () => void;
+  onSendLobbyMessage: (body: string) => Promise<void>;
 }
 
 function nameFor(profile?: Profile): string {
@@ -41,9 +49,15 @@ export default function LobbyPage({
   challenges,
   games,
   activeGame,
+  guestName,
+  onlineUserIds,
+  lobbyMessages,
+  lobbyChatStatus,
   status,
   onSignIn,
   onSignOut,
+  onStartGuest,
+  onLeaveGuest,
   onCreateChallenge,
   onAcceptChallenge,
   onDeclineChallenge,
@@ -51,19 +65,27 @@ export default function LobbyPage({
   onRefresh,
   onClearQueue,
   onStartLocalGame,
+  onSendLobbyMessage,
 }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [opponentId, setOpponentId] = useState('');
+  const [guestInput, setGuestInput] = useState('Guest');
+  const [playerSearch, setPlayerSearch] = useState('');
 
   const profileById = useMemo(() => new Map(profiles.map(profile => [profile.id, profile])), [profiles]);
   const opponents = user ? profiles.filter(profile => profile.id !== user.id) : [];
+  const onlineSet = useMemo(() => new Set(onlineUserIds), [onlineUserIds]);
+  const filteredOpponents = opponents.filter(profile => {
+    const needle = playerSearch.trim().toLowerCase();
+    if (!needle) return true;
+    return profile.display_name.toLowerCase().includes(needle) || profile.username.toLowerCase().includes(needle);
+  });
   const incoming = user ? challenges.filter(c => c.status === 'pending' && c.challenged_user_id === user.id).slice(0, 4) : [];
   const outgoing = user ? challenges.filter(c => c.status === 'pending' && c.challenger_user_id === user.id).slice(0, 4) : [];
   const accepted = challenges.filter(c => c.status === 'accepted' && c.game_id).slice(0, 4);
   const currentGames = games.filter(game => !game.state_json.gameOver).slice(0, 4);
   const completedGames = games.filter(game => game.state_json.gameOver).slice(0, 8);
-  const canChallenge = Boolean(user && opponentId && !activeGame);
+  const canChallenge = Boolean(user && !activeGame);
 
   return (
     <main style={pageStyle}>
@@ -72,14 +94,15 @@ export default function LobbyPage({
           <h1 style={titleStyle}>Destovky</h1>
           <p style={subtitleStyle}>Lobby, challenges, game history, and live games.</p>
         </div>
-        <button type="button" style={primaryButtonStyle} onClick={onStartLocalGame}>
-          Playground
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {guestName && <span style={guestBadgeStyle}>guest: {guestName}</span>}
+          <button type="button" style={primaryButtonStyle} onClick={onStartLocalGame}>Playground</button>
+        </div>
       </section>
 
       <div style={gridStyle}>
         <section style={panelStyle}>
-          <PanelHeader title="Account" action={user ? 'signed in' : 'login'} />
+          <PanelHeader title="Account" action={user ? 'signed in' : guestName ? 'guest' : 'login'} />
           {!configured && <p style={warningStyle}>Online play needs Supabase config in the deployed build.</p>}
           {!user ? (
             <div style={{ display: 'grid', gap: '8px' }}>
@@ -88,6 +111,10 @@ export default function LobbyPage({
               <button type="button" style={primaryButtonStyle} disabled={!configured} onClick={() => onSignIn(email, password)}>
                 Sign in
               </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
+                <input value={guestInput} onChange={e => setGuestInput(e.target.value)} placeholder="guest name" style={inputStyle} />
+                <button type="button" style={secondaryButtonStyle} onClick={() => onStartGuest(guestInput)}>Guest</button>
+              </div>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
@@ -95,36 +122,67 @@ export default function LobbyPage({
               <button type="button" style={secondaryButtonStyle} onClick={onSignOut}>Sign out</button>
             </div>
           )}
+          {guestName && !user && (
+            <button type="button" style={secondaryButtonStyle} onClick={onLeaveGuest}>Leave guest</button>
+          )}
           {status && <p style={statusStyle}>{status}</p>}
         </section>
 
         <section style={panelStyle}>
-          <PanelHeader title="Challenge" action={activeGame ? 'in game' : 'ready'} />
+          <PanelHeader title="Challenge" action={activeGame ? 'in game' : canChallenge ? 'ready' : 'login'} />
           <div style={{ display: 'grid', gap: '8px' }}>
-            <select value={opponentId} onChange={e => setOpponentId(e.target.value)} style={inputStyle} disabled={!user || Boolean(activeGame)}>
-              <option value="">{opponents.length === 0 ? 'No opponents loaded' : 'Choose opponent'}</option>
-              {opponents.map(profile => (
-                <option key={profile.id} value={profile.id}>{profile.display_name}</option>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
+              <input value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} placeholder="Search players" style={inputStyle} />
+              <button type="button" style={secondaryButtonStyle} onClick={() => undefined}>Search</button>
+            </div>
+            <div style={challengeListStyle}>
+              {filteredOpponents.length === 0 && <p style={mutedText}>{user ? 'No matching players.' : 'Sign in to challenge players.'}</p>}
+              {filteredOpponents.map(profile => (
+                <div key={profile.id} style={playerChallengeRowStyle}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                    <span style={onlineSet.has(profile.id) ? onlineDotStyle : offlineDotStyle} />
+                    <span style={bodyText}>{profile.display_name}</span>
+                  </span>
+                  <button
+                    type="button"
+                    style={smallButtonStyle}
+                    disabled={!canChallenge}
+                    onClick={() => onCreateChallenge(profile.id)}
+                  >
+                    Challenge
+                  </button>
+                </div>
               ))}
-            </select>
-            <button type="button" style={primaryButtonStyle} disabled={!canChallenge} onClick={() => onCreateChallenge(opponentId)}>
-              Send challenge
+            </div>
+            <button type="button" style={secondaryButtonStyle} disabled={!user} onClick={onClearQueue}>
+              Clear queue
             </button>
-            <button type="button" style={secondaryButtonStyle} disabled={!user} onClick={onClearQueue}>Clear queue</button>
           </div>
         </section>
 
         <section style={widePanelStyle}>
-          <PanelHeader title="Lobby" action={`${profiles.length} players`} />
+          <PanelHeader title="Players" action={`${onlineUserIds.length}/${profiles.length} online`} />
           <div style={playersGridStyle}>
             {profiles.map(profile => (
               <div key={profile.id} style={playerRowStyle}>
-                <span style={onlineDotStyle} />
+                <span style={onlineSet.has(profile.id) ? onlineDotStyle : offlineDotStyle} />
                 <span>{profile.display_name}</span>
+                <span style={{ marginLeft: 'auto', ...mutedText }}>{onlineSet.has(profile.id) ? 'online' : 'offline'}</span>
               </div>
             ))}
             {profiles.length === 0 && <p style={mutedText}>Sign in to load players.</p>}
           </div>
+        </section>
+
+        <section style={widePanelStyle}>
+          <LobbyChat
+            user={user}
+            guestName={guestName}
+            messages={lobbyMessages}
+            profiles={profiles}
+            status={lobbyChatStatus}
+            onSendMessage={onSendLobbyMessage}
+          />
         </section>
 
         <QueuePanel
@@ -280,7 +338,7 @@ const panelStyle: React.CSSProperties = {
   gap: '10px',
 };
 
-const widePanelStyle: React.CSSProperties = { ...panelStyle, gridColumn: 'span 2' };
+const widePanelStyle: React.CSSProperties = { ...panelStyle, gridColumn: '1 / -1' };
 const panelTitleStyle: React.CSSProperties = { color: '#8f8981', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' };
 const panelActionStyle: React.CSSProperties = { color: '#629924', fontSize: '10px', fontWeight: 800 };
 const bodyText: React.CSSProperties = { color: '#cfc8bf', fontSize: '12px', lineHeight: 1.35, margin: 0 };
@@ -358,6 +416,27 @@ const onlineDotStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+const offlineDotStyle: React.CSSProperties = {
+  ...onlineDotStyle,
+  background: '#4a463f',
+};
+
+const guestBadgeStyle: React.CSSProperties = {
+  color: '#c8a84a',
+  background: '#2d2612',
+  border: '1px solid #5c4b18',
+  borderRadius: '6px',
+  padding: '6px 8px',
+  fontSize: '11px',
+  fontWeight: 800,
+};
+
+const challengeListStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '6px',
+  minHeight: '118px',
+};
+
 const challengeRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -367,6 +446,11 @@ const challengeRowStyle: React.CSSProperties = {
   border: '1px solid #34312c',
   borderRadius: '6px',
   padding: '7px 8px',
+};
+
+const playerChallengeRowStyle: React.CSSProperties = {
+  ...challengeRowStyle,
+  alignItems: 'center',
 };
 
 const gameRowStyle: React.CSSProperties = {

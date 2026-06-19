@@ -15,18 +15,21 @@ import {
   finishChallengeForGame,
   getSessionUser,
   listGameMessages,
+  listLobbyMessages,
   listChallenges,
   listProfiles,
   listUserGames,
   loadGame,
   replaceGameForChallenge,
   sendGameMessage,
+  sendLobbyMessage,
   signIn,
   signOut,
   stateFromGame,
   type Challenge,
   type GameMessage,
   type GameRow,
+  type LobbyMessage,
   type Profile,
 } from './multiplayer';
 import type { GameState, Square, Color, CardType, CGPiece, PromotionRole } from './types';
@@ -189,6 +192,10 @@ export default function App() {
   const [gameSyncStatus, setGameSyncStatus] = useState('');
   const [gameMessages, setGameMessages] = useState<GameMessage[]>([]);
   const [chatStatus, setChatStatus] = useState('');
+  const [guestName, setGuestName] = useState<string | null>(null);
+  const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
+  const [lobbyMessages, setLobbyMessages] = useState<LobbyMessage[]>([]);
+  const [lobbyChatStatus, setLobbyChatStatus] = useState('');
   const activeGameRef = useRef<GameRow | null>(null);
   const savingGameRef = useRef(false);
 
@@ -273,6 +280,69 @@ export default function App() {
       void client.removeChannel(channel);
     };
   }, [mpUser, refreshMultiplayer]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !mpUser) {
+      const timeout = window.setTimeout(() => setOnlineUserIds([]), 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    const channel = client
+      .channel('presence:lobby', { config: { presence: { key: mpUser.id } } })
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState() as Record<string, Array<{ user_id?: string }>>;
+        const userIds = Object.values(state)
+          .flat()
+          .map(meta => meta.user_id)
+          .filter((id): id is string => Boolean(id));
+        setOnlineUserIds(Array.from(new Set(userIds)));
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          void channel.track({ user_id: mpUser.id });
+        }
+      });
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [mpUser]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || (!mpUser && !guestName)) {
+      const timeout = window.setTimeout(() => {
+        setLobbyMessages([]);
+        setLobbyChatStatus('');
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    void listLobbyMessages()
+      .then(messages => {
+        setLobbyMessages(messages);
+        setLobbyChatStatus('connected');
+      })
+      .catch(() => {
+        setLobbyMessages([]);
+        setLobbyChatStatus('setup needed');
+      });
+
+    const channel = client
+      .channel('lobby-messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lobby_messages' }, payload => {
+        setLobbyMessages(prev => [...prev.slice(-99), payload.new as LobbyMessage]);
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') setLobbyChatStatus('live');
+        else if (status === 'CHANNEL_ERROR') setLobbyChatStatus('poll only');
+      });
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [guestName, mpUser]);
 
   useEffect(() => {
     const client = supabase;
@@ -451,10 +521,26 @@ export default function App() {
 
   const handleStartLocalGame = useCallback(() => {
     setActiveGame(null);
+    setActiveChallengeId(null);
     setGameSyncStatus('');
     handleNewGame();
     setAppView('game');
   }, [handleNewGame]);
+
+  const handleStartGuest = useCallback((name: string) => {
+    const trimmed = name.trim() || 'Guest';
+    setGuestName(trimmed.slice(0, 24));
+    setActiveGame(null);
+    setActiveChallengeId(null);
+    setGameSyncStatus('');
+    handleNewGame();
+    setAppView('game');
+  }, [handleNewGame]);
+
+  const handleLeaveGuest = useCallback(() => {
+    setGuestName(null);
+    setAppView('lobby');
+  }, []);
 
   const handleTimeControlChange = useCallback((tc: TimeControl) => {
     setTimeControl(tc);
@@ -471,6 +557,7 @@ export default function App() {
   const handleMpSignIn = useCallback(async (email: string, password: string) => {
     setMpStatus('Signing in...');
     const user = await signIn(email, password);
+    setGuestName(null);
     setMpUser(user);
     setMpStatus('Signed in');
     setAppView('lobby');
@@ -485,6 +572,8 @@ export default function App() {
     setGames([]);
     setActiveGame(null);
     setActiveChallengeId(null);
+    setOnlineUserIds([]);
+    setLobbyMessages([]);
     setAppView('lobby');
     setGameSyncStatus('');
     setMpStatus('Signed out');
@@ -573,6 +662,16 @@ export default function App() {
       setChatStatus(error instanceof Error ? 'setup needed' : 'send failed');
     }
   }, [activeChallengeId, mpUser]);
+
+  const handleSendLobbyMessage = useCallback(async (body: string) => {
+    if (!mpUser) return;
+    try {
+      await sendLobbyMessage(mpUser.id, body);
+      setLobbyChatStatus('sent');
+    } catch (error) {
+      setLobbyChatStatus(error instanceof Error ? 'setup needed' : 'send failed');
+    }
+  }, [mpUser]);
 
   const handleResign = useCallback(async () => {
     if (!activeGame || !activeSeat || liveGame.gameOver) return;
@@ -795,9 +894,15 @@ export default function App() {
           challenges={challenges}
           games={games}
           activeGame={activeGame}
+          guestName={guestName}
+          onlineUserIds={onlineUserIds}
+          lobbyMessages={lobbyMessages}
+          lobbyChatStatus={lobbyChatStatus}
           status={mpStatus}
           onSignIn={handleMpSignIn}
           onSignOut={handleMpSignOut}
+          onStartGuest={handleStartGuest}
+          onLeaveGuest={handleLeaveGuest}
           onCreateChallenge={handleCreateChallenge}
           onAcceptChallenge={handleAcceptChallenge}
           onDeclineChallenge={handleDeclineChallenge}
@@ -805,6 +910,7 @@ export default function App() {
           onRefresh={refreshMultiplayer}
           onClearQueue={handleClearChallengeQueue}
           onStartLocalGame={handleStartLocalGame}
+          onSendLobbyMessage={handleSendLobbyMessage}
         />
       </div>
     );
@@ -818,7 +924,26 @@ export default function App() {
         <header style={{ flexShrink: 0, background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px' }}>
           <KnightLogo />
           <span style={{ color: '#fff', fontWeight: 700, fontSize: '16px' }}>Destovky</span>
-          <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '10px', fontWeight: 600, padding: '1px 6px', marginLeft: 'auto' }}>hot seat</span>
+          <button
+            type="button"
+            onClick={() => setAppView('lobby')}
+            style={{
+              marginLeft: 'auto',
+              background: '#1a1816',
+              color: '#9e9b96',
+              border: '1px solid #3d3b38',
+              borderRadius: '6px',
+              padding: '5px 8px',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Lobby
+          </button>
+          <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '10px', fontWeight: 600, padding: '1px 6px' }}>
+            {activeGame ? 'online' : guestName ? 'guest' : 'hot seat'}
+          </span>
         </header>
 
         {/* Black player row — rigid */}

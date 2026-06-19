@@ -4,6 +4,6 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // GitHub Pages serves this project under /destovky/; locally serve from root.
-  base: process.env.GITHUB_ACTIONS ? '/destovky/' : '/',
+  // GitHub Pages builds pass an explicit base; locally serve from root.
+  base: process.env.VITE_BASE_PATH ?? (process.env.GITHUB_ACTIONS ? '/destovky/' : '/'),
 })

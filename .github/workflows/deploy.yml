@@ -2,7 +2,8 @@ name: Build & Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, lila-lobby-redesign]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,24 +22,60 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout stable app
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable
+
+      - name: Checkout lab app
+        uses: actions/checkout@v4
+        with:
+          ref: lila-lobby-redesign
+          path: lab
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: |
+            stable/package-lock.json
+            lab/package-lock.json
 
-      - run: npm ci
+      - name: Install stable dependencies
+        working-directory: stable
+        run: npm ci
 
-      - run: npm run build
+      - name: Build stable app
+        working-directory: stable
+        run: npm run build
         env:
           GITHUB_ACTIONS: true
+          VITE_BASE_PATH: /destovky/
+
+      - name: Install lab dependencies
+        working-directory: lab
+        run: npm ci
+
+      - name: Build lab app
+        working-directory: lab
+        run: npm run build
+        env:
+          GITHUB_ACTIONS: true
+          VITE_BASE_PATH: /destovky/lab/
+
+      - name: Compose Pages artifact
+        run: |
+          mkdir -p site
+          cp -R stable/dist/. site/
+          mkdir -p site/lab
+          cp -R lab/dist/. site/lab/
 
       - uses: actions/configure-pages@v4
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: ./site
 
       - id: deployment
         uses: actions/deploy-pages@v4

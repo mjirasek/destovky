@@ -30,6 +30,17 @@ create table if not exists public.challenges (
   check (challenger_user_id <> challenged_user_id)
 );
 
+create table if not exists public.game_messages (
+  id uuid primary key default gen_random_uuid(),
+  challenge_id uuid not null references public.challenges(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+alter table public.game_messages
+add column if not exists challenge_id uuid references public.challenges(id) on delete cascade;
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -53,6 +64,7 @@ for each row execute function public.touch_updated_at();
 alter table public.profiles enable row level security;
 alter table public.games enable row level security;
 alter table public.challenges enable row level security;
+alter table public.game_messages enable row level security;
 
 drop policy if exists "active profiles are readable by signed-in users" on public.profiles;
 create policy "active profiles are readable by signed-in users"
@@ -99,6 +111,31 @@ to authenticated
 using ((select auth.uid()) in (challenger_user_id, challenged_user_id))
 with check ((select auth.uid()) in (challenger_user_id, challenged_user_id));
 
+drop policy if exists "players can read game messages" on public.game_messages;
+create policy "players can read game messages"
+on public.game_messages for select
+to authenticated
+using (
+  exists (
+    select 1 from public.challenges c
+    where c.id = challenge_id
+      and (select auth.uid()) in (c.challenger_user_id, c.challenged_user_id)
+  )
+);
+
+drop policy if exists "players can create game messages" on public.game_messages;
+create policy "players can create game messages"
+on public.game_messages for insert
+to authenticated
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1 from public.challenges c
+    where c.id = challenge_id
+      and (select auth.uid()) in (c.challenger_user_id, c.challenged_user_id)
+  )
+);
+
 do $$
 begin
   if not exists (
@@ -113,5 +150,12 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'challenges'
   ) then
     alter publication supabase_realtime add table public.challenges;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'game_messages'
+  ) then
+    alter publication supabase_realtime add table public.game_messages;
   end if;
 end $$;

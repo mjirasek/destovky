@@ -39,6 +39,15 @@ export interface GameRow {
   updated_at: string;
 }
 
+export interface GameMessage {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  profile?: Profile;
+}
+
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured');
   return supabase;
@@ -95,6 +104,17 @@ export async function listChallenges(userId: string): Promise<Challenge[]> {
     .select('*')
     .or(`challenger_user_id.eq.${userId},challenged_user_id.eq.${userId}`)
     .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listUserGames(): Promise<GameRow[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('games')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(30);
   if (error) throw error;
   return data ?? [];
 }
@@ -188,6 +208,31 @@ export async function loadGame(gameId: string): Promise<GameRow> {
     .from('games')
     .select('*')
     .eq('id', gameId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listGameMessages(challengeId: string): Promise<GameMessage[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('game_messages')
+    .select('*')
+    .eq('challenge_id', challengeId)
+    .order('created_at', { ascending: true })
+    .limit(80);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function sendGameMessage(challengeId: string, userId: string, body: string): Promise<GameMessage> {
+  const client = requireSupabase();
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error('Message is empty');
+  const { data, error } = await client
+    .from('game_messages')
+    .insert({ challenge_id: challengeId, user_id: userId, body: trimmed.slice(0, 500) })
+    .select('*')
     .single();
   if (error) throw error;
   return data;

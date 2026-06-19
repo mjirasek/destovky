@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import ChessBoard from './components/ChessBoard';
 import CardPile from './components/CardPile';
 import GameInfo from './components/GameInfo';
-import MultiplayerPanel from './components/MultiplayerPanel';
+import GameChat from './components/GameChat';
+import LobbyPage from './components/LobbyPage';
 import PromotionDialog from './components/PromotionDialog';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
@@ -13,14 +14,18 @@ import {
   declineChallenge,
   finishChallengeForGame,
   getSessionUser,
+  listGameMessages,
   listChallenges,
   listProfiles,
+  listUserGames,
   loadGame,
   replaceGameForChallenge,
+  sendGameMessage,
   signIn,
   signOut,
   stateFromGame,
   type Challenge,
+  type GameMessage,
   type GameRow,
   type Profile,
 } from './multiplayer';
@@ -80,6 +85,7 @@ const TIME_PRESETS = [
   { label: '15+10', initial: 900,  increment: 10 },
 ];
 interface TimeControl { initial: number; increment: number; label: string; }
+type AppView = 'lobby' | 'game';
 
 // ── Responsive hook ───────────────────────────────────────────────────────────
 
@@ -161,6 +167,7 @@ function PlayerLabel({
 
 export default function App() {
   const isMobile = useIsMobile();
+  const [appView, setAppView] = useState<AppView>('lobby');
   const initial = createInitialState();
   const [liveGame, setLiveGame] = useState<GameState>(initial);
   const [snapshots, setSnapshots] = useState<GameState[]>([initial]);
@@ -175,9 +182,13 @@ export default function App() {
   const [mpUser, setMpUser] = useState<User | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [games, setGames] = useState<GameRow[]>([]);
   const [activeGame, setActiveGame] = useState<GameRow | null>(null);
+  const [activeChallengeId, setActiveChallengeId] = useState<string | null>(null);
   const [mpStatus, setMpStatus] = useState('');
   const [gameSyncStatus, setGameSyncStatus] = useState('');
+  const [gameMessages, setGameMessages] = useState<GameMessage[]>([]);
+  const [chatStatus, setChatStatus] = useState('');
   const activeGameRef = useRef<GameRow | null>(null);
   const savingGameRef = useRef(false);
 
@@ -214,14 +225,17 @@ export default function App() {
       if (!user) {
         setProfiles([]);
         setChallenges([]);
+        setGames([]);
         return;
       }
-      const [nextProfiles, nextChallenges] = await Promise.all([
+      const [nextProfiles, nextChallenges, nextGames] = await Promise.all([
         listProfiles(),
         listChallenges(user.id),
+        listUserGames(),
       ]);
       setProfiles(nextProfiles);
       setChallenges(nextChallenges);
+      setGames(nextGames);
     } catch (error) {
       setMpStatus(error instanceof Error ? error.message : 'Could not refresh multiplayer');
     }
@@ -302,6 +316,41 @@ export default function App() {
 
     return () => window.clearInterval(interval);
   }, [activeGameId, applySyncedGame]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !activeChallengeId || !mpUser) {
+      const timeout = window.setTimeout(() => {
+        setGameMessages([]);
+        setChatStatus('');
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    void listGameMessages(activeChallengeId)
+      .then(messages => {
+        setGameMessages(messages);
+        setChatStatus('connected');
+      })
+      .catch(error => {
+        setGameMessages([]);
+        setChatStatus(error instanceof Error ? 'setup needed' : 'unavailable');
+      });
+
+    const channel = client
+      .channel(`game-messages:${activeChallengeId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_messages', filter: `challenge_id=eq.${activeChallengeId}` }, payload => {
+        setGameMessages(prev => [...prev, payload.new as GameMessage]);
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') setChatStatus('live');
+        else if (status === 'CHANNEL_ERROR') setChatStatus('poll only');
+      });
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [activeChallengeId, mpUser]);
 
   useEffect(() => {
     if (!clocksActive || liveGame.gameOver || timeControl.initial === 0) return;
@@ -400,21 +449,31 @@ export default function App() {
     setClocksActive(false);
   }, [timeControl.initial]);
 
+  const handleStartLocalGame = useCallback(() => {
+    setActiveGame(null);
+    setGameSyncStatus('');
+    handleNewGame();
+    setAppView('game');
+  }, [handleNewGame]);
+
   const handleTimeControlChange = useCallback((tc: TimeControl) => {
     setTimeControl(tc);
     setClocks({ white: tc.initial, black: tc.initial });
   }, []);
 
-  const loadMultiplayerGame = useCallback((row: GameRow) => {
+  const loadMultiplayerGame = useCallback((row: GameRow, challengeId?: string | null) => {
     applySyncedGame(row);
+    setActiveChallengeId(challengeId ?? activeChallengeId);
     setClocksActive(false);
-  }, [applySyncedGame]);
+    setAppView('game');
+  }, [activeChallengeId, applySyncedGame]);
 
   const handleMpSignIn = useCallback(async (email: string, password: string) => {
     setMpStatus('Signing in...');
     const user = await signIn(email, password);
     setMpUser(user);
     setMpStatus('Signed in');
+    setAppView('lobby');
     await refreshMultiplayer();
   }, [refreshMultiplayer]);
 
@@ -423,7 +482,10 @@ export default function App() {
     setMpUser(null);
     setProfiles([]);
     setChallenges([]);
+    setGames([]);
     setActiveGame(null);
+    setActiveChallengeId(null);
+    setAppView('lobby');
     setGameSyncStatus('');
     setMpStatus('Signed out');
   }, []);
@@ -435,6 +497,7 @@ export default function App() {
       await createChallenge(mpUser.id, opponentId);
       setMpStatus('Challenge sent');
       setActiveGame(null);
+      setActiveChallengeId(null);
       setGameSyncStatus('');
       await refreshMultiplayer();
     } catch (error) {
@@ -446,7 +509,7 @@ export default function App() {
     try {
       setMpStatus('Creating game...');
       const row = await acceptChallenge(challenge);
-      loadMultiplayerGame(row);
+      loadMultiplayerGame(row, challenge.id);
       setMpStatus('Challenge accepted');
       await refreshMultiplayer();
     } catch (error) {
@@ -467,12 +530,13 @@ export default function App() {
   const handleOpenGame = useCallback(async (gameId: string) => {
     try {
       const row = await loadGame(gameId);
-      loadMultiplayerGame(row);
+      const challenge = challenges.find(item => item.game_id === gameId);
+      loadMultiplayerGame(row, challenge?.id ?? null);
       setMpStatus('Game loaded');
     } catch (error) {
       setMpStatus(error instanceof Error ? error.message : 'Could not open game');
     }
-  }, [loadMultiplayerGame]);
+  }, [challenges, loadMultiplayerGame]);
 
   const handleClearChallengeQueue = useCallback(async () => {
     if (!mpUser) return;
@@ -480,6 +544,7 @@ export default function App() {
       setMpStatus('Clearing queue...');
       await clearOpenChallengesForUser(mpUser.id);
       setActiveGame(null);
+      setActiveChallengeId(null);
       setGameSyncStatus('');
       handleNewGame();
       await refreshMultiplayer();
@@ -499,12 +564,15 @@ export default function App() {
     }
   }, [activeGame, refreshMultiplayer]);
 
-  const handleLeaveMultiplayerGame = useCallback(async () => {
-    setActiveGame(null);
-    setGameSyncStatus('');
-    handleNewGame();
-    await refreshMultiplayer();
-  }, [handleNewGame, refreshMultiplayer]);
+  const handleSendGameMessage = useCallback(async (body: string) => {
+    if (!activeChallengeId || !mpUser) return;
+    try {
+      await sendGameMessage(activeChallengeId, mpUser.id, body);
+      setChatStatus('sent');
+    } catch (error) {
+      setChatStatus(error instanceof Error ? 'setup needed' : 'send failed');
+    }
+  }, [activeChallengeId, mpUser]);
 
   const handleResign = useCallback(async () => {
     if (!activeGame || !activeSeat || liveGame.gameOver) return;
@@ -554,6 +622,16 @@ export default function App() {
 
     return () => window.clearTimeout(timeout);
   }, [activeGameId, challenges, handleOpenGame, mpUser]);
+
+  useEffect(() => {
+    if (activeChallengeId || !activeGameId) return;
+    const challenge = challenges.find(item => item.game_id === activeGameId);
+    if (!challenge) return;
+    const timeout = window.setTimeout(() => {
+      setActiveChallengeId(challenge.id);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeChallengeId, activeGameId, challenges]);
 
   const handleFlipCard = useCallback(() => {
     if (!atLatest) return;
@@ -651,31 +729,87 @@ export default function App() {
         onOfferOrAcceptDraw={handleOfferOrAcceptDraw}
         onDeclineDraw={handleDeclineDraw}
       />
-      <MultiplayerPanel
-        configured={hasSupabaseConfig}
-        user={mpUser}
-        profiles={profiles}
-        challenges={challenges}
-        activeGame={activeGame}
-        activeSeat={activeSeat}
-        gameOver={liveGame.gameOver}
-        drawOfferBy={liveGame.drawOfferBy}
-        status={mpStatus}
-        syncStatus={gameSyncStatus}
-        onSignIn={handleMpSignIn}
-        onSignOut={handleMpSignOut}
-        onCreateChallenge={handleCreateChallenge}
-        onAcceptChallenge={handleAcceptChallenge}
-        onDeclineChallenge={handleDeclineChallenge}
-        onOpenGame={handleOpenGame}
-        onRefresh={refreshMultiplayer}
-        onClearQueue={handleClearChallengeQueue}
-        onLeaveGame={handleLeaveMultiplayerGame}
-      />
+      {activeGame && (
+        <GameChat
+          user={mpUser}
+          messages={gameMessages}
+          profiles={profiles}
+          status={chatStatus || gameSyncStatus}
+          onSendMessage={handleSendGameMessage}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => setAppView('lobby')}
+        style={{
+          width: '100%', padding: '7px', borderRadius: '8px',
+          fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+          background: '#1a1816', color: '#9e9b96', border: '1px solid #3d3b38',
+        }}
+      >
+        Lobby
+      </button>
     </div>
   );
 
   // ── MOBILE layout ────────────────────────────────────────────────────────────
+  const appHeader = (
+    <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 24px', gap: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <KnightLogo />
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px', letterSpacing: '0.03em' }}>Destovky</span>
+      </div>
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button type="button" onClick={() => setAppView('lobby')} style={{
+          background: appView === 'lobby' ? '#1e2a0f' : '#1a1816',
+          color: appView === 'lobby' ? '#a8d060' : '#9e9b96',
+          border: `1px solid ${appView === 'lobby' ? '#3a5a12' : '#3d3b38'}`,
+          borderRadius: '6px',
+          padding: '6px 9px',
+          fontSize: '12px',
+          fontWeight: 800,
+          cursor: 'pointer',
+        }}>Lobby</button>
+        <button type="button" onClick={() => setAppView('game')} style={{
+          background: appView === 'game' ? '#1e2a0f' : '#1a1816',
+          color: appView === 'game' ? '#a8d060' : '#9e9b96',
+          border: `1px solid ${appView === 'game' ? '#3a5a12' : '#3d3b38'}`,
+          borderRadius: '6px',
+          padding: '6px 9px',
+          fontSize: '12px',
+          fontWeight: 800,
+          cursor: 'pointer',
+        }}>Game</button>
+      </nav>
+    </header>
+  );
+
+  if (appView === 'lobby') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
+        {appHeader}
+        <LobbyPage
+          configured={hasSupabaseConfig}
+          user={mpUser}
+          profiles={profiles}
+          challenges={challenges}
+          games={games}
+          activeGame={activeGame}
+          status={mpStatus}
+          onSignIn={handleMpSignIn}
+          onSignOut={handleMpSignOut}
+          onCreateChallenge={handleCreateChallenge}
+          onAcceptChallenge={handleAcceptChallenge}
+          onDeclineChallenge={handleDeclineChallenge}
+          onOpenGame={handleOpenGame}
+          onRefresh={refreshMultiplayer}
+          onClearQueue={handleClearChallengeQueue}
+          onStartLocalGame={handleStartLocalGame}
+        />
+      </div>
+    );
+  }
+
   if (isMobile) {
     return (
       <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#161512', color: '#bababa' }}>
@@ -717,14 +851,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
-      <header style={{ background: '#262422', borderBottom: '1px solid #3d3b38', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <KnightLogo />
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px', letterSpacing: '0.03em' }}>Destovky</span>
-          <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '11px', fontWeight: 600, padding: '2px 8px' }}>hot seat</span>
-        </div>
-        <span style={{ fontSize: '11px', color: '#6e6b67' }}>Powered by chessground &amp; chessops</span>
-      </header>
+      {appHeader}
 
       <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', gap: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr 96px', gap: '16px', alignItems: 'center', width: '100%', maxWidth: '752px' }}>

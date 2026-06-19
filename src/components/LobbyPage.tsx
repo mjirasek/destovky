@@ -26,6 +26,7 @@ interface Props {
   onRefresh: () => Promise<void>;
   onClearQueue: () => Promise<void>;
   onStartLocalGame: () => void;
+  onStartComputerGame: () => void;
   onSendLobbyMessage: (body: string) => Promise<void>;
 }
 
@@ -82,6 +83,7 @@ export default function LobbyPage({
   onRefresh,
   onClearQueue,
   onStartLocalGame,
+  onStartComputerGame,
   onSendLobbyMessage,
 }: Props) {
   const [email, setEmail] = useState('');
@@ -119,6 +121,7 @@ export default function LobbyPage({
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {guestName && <span style={guestBadgeStyle}>guest: {guestName}</span>}
+          <button type="button" style={primaryButtonStyle} onClick={onStartComputerGame}>Play computer</button>
           <button type="button" style={primaryButtonStyle} onClick={onStartLocalGame}>Playground</button>
         </div>
       </section>
@@ -152,8 +155,14 @@ export default function LobbyPage({
         </section>
 
         <section style={panelStyle}>
-          <PanelHeader title="Challenge" action={activeGame ? 'in game' : canChallenge ? 'ready' : 'login'} />
+          <PanelHeader title="Play" action={activeGame ? 'in game' : canChallenge ? 'ready' : 'offline ok'} />
           <div style={{ display: 'grid', gap: '8px' }}>
+            <button type="button" style={primaryButtonStyle} onClick={onStartComputerGame}>
+              Play against computer
+            </button>
+            <button type="button" style={secondaryButtonStyle} onClick={onStartLocalGame}>
+              Playground
+            </button>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
               <input value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} placeholder="Search players" style={inputStyle} />
               <button type="button" style={secondaryButtonStyle} onClick={() => undefined}>Search</button>

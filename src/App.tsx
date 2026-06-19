@@ -6,6 +6,7 @@ import GameChat from './components/GameChat';
 import LobbyPage from './components/LobbyPage';
 import PromotionDialog from './components/PromotionDialog';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
+import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
 import {
   acceptChallenge,
@@ -61,6 +62,55 @@ function moveNotation(piece: CGPiece, from: Square, to: Square, captured: boolea
   return `${SYM[piece.role][piece.color]}${sqName(from)}${captured ? '×' : '-'}${sqName(to)}`;
 }
 
+function engineActionNotation(before: GameState, action: EngineAction): string | null {
+  switch (action.kind) {
+    case 'flip-card':
+      return null;
+    case 'place-piece': {
+      const deck = before.turn === 'white' ? before.whiteDecks : before.blackDecks;
+      const card = deck.revealed;
+      return card ? placeNotation(card.type, before.turn, action.square) : null;
+    }
+    case 'move-piece': {
+      const piece = before.board.get(action.from);
+      if (!piece) return null;
+      return moveNotation(piece, action.from, action.to, before.board.has(action.to));
+    }
+    case 'promote':
+      return `=${SYM[action.role][before.turn]}`;
+  }
+}
+
+function failedCardNotation(before: GameState): string {
+  const deck = before.turn === 'white' ? before.whiteDecks : before.blackDecks;
+  const card = deck.pile[0] ?? deck.revealed;
+  if (!card) return 'failed card';
+  const role = card.type === 'bishop-light' || card.type === 'bishop-dark' ? 'bishop' : card.type as CGPiece['role'];
+  return `${SYM[role][before.turn]}->x`;
+}
+
+function playEngineTurnWithNotation(state: GameState): { state: GameState; notation: string } | null {
+  const movedColor = state.turn;
+  let current = state;
+  const notation: string[] = [];
+
+  for (let step = 0; step < 6; step++) {
+    if (current.gameOver || current.turn !== movedColor) break;
+
+    const action = chooseRandomEngineAction(current);
+    if (!action) return null;
+    const before = current;
+    const actionNotation = engineActionNotation(before, action);
+    current = applyEngineAction(current, action);
+
+    if (actionNotation) notation.push(actionNotation);
+    if (action.kind === 'flip-card' && current.gameOver) notation.push(failedCardNotation(before));
+  }
+
+  if (current === state || notation.length === 0) return null;
+  return { state: current, notation: notation.join('') };
+}
+
 function colorName(color: Color): string {
   return color === 'white' ? 'White' : 'Black';
 }
@@ -90,6 +140,7 @@ const TIME_PRESETS = [
 ];
 interface TimeControl { initial: number; increment: number; label: string; }
 type AppView = 'lobby' | 'game';
+type LocalMode = 'hotseat' | 'computer';
 
 // ── Responsive hook ───────────────────────────────────────────────────────────
 
@@ -172,6 +223,8 @@ function PlayerLabel({
 export default function App() {
   const isMobile = useIsMobile();
   const [appView, setAppView] = useState<AppView>('lobby');
+  const [localMode, setLocalMode] = useState<LocalMode>('hotseat');
+  const [engineStatus, setEngineStatus] = useState('');
   const initial = createInitialState();
   const [liveGame, setLiveGame] = useState<GameState>(initial);
   const [snapshots, setSnapshots] = useState<GameState[]>([initial]);
@@ -199,16 +252,19 @@ export default function App() {
   const [lobbyChatStatus, setLobbyChatStatus] = useState('');
   const activeGameRef = useRef<GameRow | null>(null);
   const savingGameRef = useRef(false);
+  const engineThinkingRef = useRef(false);
 
   const atLatest = snapshotCursor === null;
   const displayGame = atLatest ? liveGame : snapshots[snapshotCursor!];
-  const activeSeat: Color | null =
+  const onlineSeat: Color | null =
     activeGame && mpUser?.id === activeGame.white_user_id ? 'white'
       : activeGame && mpUser?.id === activeGame.black_user_id ? 'black'
         : null;
+  const activeSeat: Color | null = activeGame ? onlineSeat : localMode === 'computer' ? 'white' : null;
   const activeGameId = activeGame?.id ?? null;
   const boardOrientation: Color = activeSeat ?? 'white';
-  const canAct = !activeGame || activeSeat === liveGame.turn;
+  const computerTurn = localMode === 'computer' && !activeGame && liveGame.turn === 'black';
+  const canAct = activeGame ? activeSeat === liveGame.turn : localMode === 'computer' ? !computerTurn : true;
   const interactive = atLatest && !liveGame.pendingPromotion && canAct;
   const listCursor = atLatest ? notations.length : snapshotCursor!;
 
@@ -526,14 +582,39 @@ export default function App() {
     }
   }, [commitSnapshot, timeControl.initial, timeControl.increment]);
 
+  useEffect(() => {
+    if (localMode !== 'computer' || activeGame || liveGame.turn !== 'black' || liveGame.gameOver || !atLatest) return;
+    if (engineThinkingRef.current) return;
+
+    engineThinkingRef.current = true;
+    setEngineStatus('Computer thinking...');
+    const timeout = window.setTimeout(() => {
+      const result = playEngineTurnWithNotation(liveGame);
+      if (result) {
+        pushSnapshot(result.state, `Computer ${result.notation}`, 'black');
+        setEngineStatus('Computer moved');
+      } else {
+        setEngineStatus('Computer has no legal move');
+      }
+      engineThinkingRef.current = false;
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timeout);
+      engineThinkingRef.current = false;
+    };
+  }, [activeGame, atLatest, liveGame, localMode, pushSnapshot]);
+
   const handleNewGame = useCallback(() => {
     const s = createInitialState();
     setLiveGame(s); setSnapshots([s]); setNotations([]); setSnapshotCursor(null); setPendingNotation('');
     setClocks({ white: timeControl.initial, black: timeControl.initial });
     setClocksActive(false);
+    setEngineStatus('');
   }, [timeControl.initial]);
 
   const handleStartLocalGame = useCallback(() => {
+    setLocalMode('hotseat');
     setActiveGame(null);
     setActiveChallengeId(null);
     setGameSyncStatus('');
@@ -541,9 +622,20 @@ export default function App() {
     setAppView('game');
   }, [handleNewGame]);
 
+  const handleStartComputerGame = useCallback(() => {
+    setLocalMode('computer');
+    setActiveGame(null);
+    setActiveChallengeId(null);
+    setGameSyncStatus('');
+    setGuestName(null);
+    handleNewGame();
+    setAppView('game');
+  }, [handleNewGame]);
+
   const handleStartGuest = useCallback((name: string) => {
     const trimmed = name.trim() || 'Guest';
     setGuestName(trimmed.slice(0, 24));
+    setLocalMode('hotseat');
     setActiveGame(null);
     setActiveChallengeId(null);
     setGameSyncStatus('');
@@ -562,6 +654,7 @@ export default function App() {
   }, []);
 
   const loadMultiplayerGame = useCallback((row: GameRow, challengeId?: string | null) => {
+    setLocalMode('hotseat');
     applySyncedGame(row);
     setActiveChallengeId(challengeId ?? activeChallengeId);
     setClocksActive(false);
@@ -828,7 +921,7 @@ export default function App() {
         showClocks={showClocks && !isMobile}
         clocksActive={clocksActive}
         atLatest={atLatest}
-        activeSeat={activeSeat}
+        activeSeat={activeGame ? activeSeat : null}
         drawOfferBy={liveGame.drawOfferBy}
         timePresets={TIME_PRESETS}
         timeControl={timeControl}
@@ -850,6 +943,19 @@ export default function App() {
           status={chatStatus || gameSyncStatus}
           onSendMessage={handleSendGameMessage}
         />
+      )}
+      {localMode === 'computer' && !activeGame && (
+        <div style={{
+          background: '#1f1e1b',
+          border: '1px solid #34312c',
+          borderRadius: '6px',
+          padding: '8px 10px',
+          color: '#9e9b96',
+          fontSize: '12px',
+          lineHeight: 1.35,
+        }}>
+          You play White. Computer plays random legal Black moves. {engineStatus}
+        </div>
       )}
       <button
         type="button"
@@ -924,6 +1030,7 @@ export default function App() {
           onRefresh={refreshMultiplayer}
           onClearQueue={handleClearChallengeQueue}
           onStartLocalGame={handleStartLocalGame}
+          onStartComputerGame={handleStartComputerGame}
           onSendLobbyMessage={handleSendLobbyMessage}
         />
       </div>
@@ -956,7 +1063,7 @@ export default function App() {
             Lobby
           </button>
           <span style={{ background: '#1e2a0f', color: '#629924', border: '1px solid #3a5a12', borderRadius: '4px', fontSize: '10px', fontWeight: 600, padding: '1px 6px' }}>
-            {activeGame ? 'online' : guestName ? 'guest' : 'hot seat'}
+            {activeGame ? 'online' : localMode === 'computer' ? 'computer' : guestName ? 'guest' : 'hot seat'}
           </span>
         </header>
 

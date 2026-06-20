@@ -5,6 +5,7 @@ import GameInfo from './components/GameInfo';
 import GameChat from './components/GameChat';
 import LobbyPage from './components/LobbyPage';
 import PromotionDialog from './components/PromotionDialog';
+import EnginePage from './components/EnginePage';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
 import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
@@ -140,7 +141,7 @@ const TIME_PRESETS = [
   { label: '15+10', initial: 900,  increment: 10 },
 ];
 interface TimeControl { initial: number; increment: number; label: string; }
-type AppView = 'lobby' | 'game';
+type AppView = 'lobby' | 'game' | 'engine';
 type LocalMode = 'hotseat' | 'computer';
 type AuthMode = 'sign-in' | 'register';
 
@@ -1118,6 +1119,16 @@ export default function App() {
           fontWeight: 800,
           cursor: 'pointer',
         }}>Lobby</button>
+        <button type="button" onClick={() => { setPlayMenuOpen(false); setAppView('engine'); }} style={{
+          background: appView === 'engine' ? '#1a1e2a' : 'transparent',
+          color: appView === 'engine' ? '#60a0d0' : '#9e9b96',
+          border: `1px solid ${appView === 'engine' ? '#2a3a5a' : 'transparent'}`,
+          borderRadius: '6px',
+          padding: '6px 9px',
+          fontSize: '12px',
+          fontWeight: 800,
+          cursor: 'pointer',
+        }}>Engine</button>
       </nav>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
@@ -1184,6 +1195,15 @@ export default function App() {
       </div>
     </header>
   );
+
+  if (appView === 'engine') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
+        {appHeader}
+        <EnginePage />
+      </div>
+    );
+  }
 
   if (appView === 'lobby') {
     return (

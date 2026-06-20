@@ -1,0 +1,308 @@
+[
+  {
+    "timestamp": "2026-06-20 04:59:24",
+    "total_games": 60,
+    "elapsed": 27.3,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.1,
+        "b_rate": 0.5,
+        "d_rate": 0.4,
+        "med_turns": 99
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.25,
+        "b_rate": 0.0,
+        "d_rate": 0.75,
+        "med_turns": 1200
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.1,
+        "b_rate": 0.1,
+        "d_rate": 0.8,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 09:00:15",
+    "total_games": 150,
+    "elapsed": 64.1,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.04,
+        "b_rate": 0.4,
+        "d_rate": 0.56,
+        "med_turns": 1200
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.38,
+        "b_rate": 0.04,
+        "d_rate": 0.58,
+        "med_turns": 1200
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.08,
+        "b_rate": 0.1,
+        "d_rate": 0.82,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 14:08:46",
+    "total_games": 150,
+    "elapsed": 49.1,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.08,
+        "b_rate": 0.34,
+        "d_rate": 0.58,
+        "med_turns": 1200
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.4,
+        "b_rate": 0.12,
+        "d_rate": 0.48,
+        "med_turns": 137
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.16,
+        "b_rate": 0.02,
+        "d_rate": 0.82,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 15:37:44",
+    "total_games": 150,
+    "elapsed": 61.1,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.08,
+        "b_rate": 0.4,
+        "d_rate": 0.52,
+        "med_turns": 250
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.34,
+        "b_rate": 0.06,
+        "d_rate": 0.6,
+        "med_turns": 1200
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.18,
+        "b_rate": 0.12,
+        "d_rate": 0.7,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 15:41:59",
+    "total_games": 150,
+    "elapsed": 43.7,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.0,
+        "b_rate": 0.68,
+        "d_rate": 0.32,
+        "med_turns": 89
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.56,
+        "b_rate": 0.04,
+        "d_rate": 0.4,
+        "med_turns": 133
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.34,
+        "b_rate": 0.16,
+        "d_rate": 0.5,
+        "med_turns": 215
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 15:43:28",
+    "total_games": 150,
+    "elapsed": 53.6,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.04,
+        "b_rate": 0.4,
+        "d_rate": 0.56,
+        "med_turns": 1200
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.28,
+        "b_rate": 0.12,
+        "d_rate": 0.6,
+        "med_turns": 1200
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.2,
+        "b_rate": 0.14,
+        "d_rate": 0.66,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 15:51:28",
+    "total_games": 150,
+    "elapsed": 49.5,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.04,
+        "b_rate": 0.42,
+        "d_rate": 0.54,
+        "med_turns": 1200
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.56,
+        "b_rate": 0.04,
+        "d_rate": 0.4,
+        "med_turns": 196
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.14,
+        "b_rate": 0.28,
+        "d_rate": 0.58,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 17:05:13",
+    "total_games": 150,
+    "elapsed": 124.9,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.04,
+        "b_rate": 0.46,
+        "d_rate": 0.5,
+        "med_turns": 292
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.6,
+        "b_rate": 0.02,
+        "d_rate": 0.38,
+        "med_turns": 138
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.24,
+        "b_rate": 0.18,
+        "d_rate": 0.58,
+        "med_turns": 1200
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-20 19:03:50",
+    "total_games": 150,
+    "elapsed": 50.4,
+    "matchups": [
+      {
+        "label": "[A] Neural(W) vs Heuristic(B)",
+        "white": "neural",
+        "black": "heuristic",
+        "w_rate": 0.02,
+        "b_rate": 0.54,
+        "d_rate": 0.44,
+        "med_turns": 212
+      },
+      {
+        "label": "[B] Heuristic(W) vs Neural(B)",
+        "white": "heuristic",
+        "black": "neural",
+        "w_rate": 0.52,
+        "b_rate": 0.06,
+        "d_rate": 0.42,
+        "med_turns": 191
+      },
+      {
+        "label": "[C] Neural(W) vs Neural(B)",
+        "white": "neural",
+        "black": "neural",
+        "w_rate": 0.22,
+        "b_rate": 0.08,
+        "d_rate": 0.7,
+        "med_turns": 1200
+      }
+    ]
+  }
+]

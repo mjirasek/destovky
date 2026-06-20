@@ -53,7 +53,11 @@ export function legalEngineActions(state: GameState): EngineAction[] {
     }
   }
 
-  if (state.turnMode !== 'must-move' && currentDeckHasCards(state)) {
+  // Only offer flip when not already forced to move, AND either:
+  //   • not in check (normal choice), OR
+  //   • in check but no legal moves (flip is the only escape attempt)
+  const noLegalMoves = actions.length === 0;
+  if (state.turnMode !== 'must-move' && currentDeckHasCards(state) && (!state.inCheck || noLegalMoves)) {
     actions.push({ kind: 'flip-card' });
   }
 

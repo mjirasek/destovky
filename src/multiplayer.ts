@@ -394,3 +394,52 @@ async function findAcceptedChallengeForGame(row: GameRow): Promise<Challenge> {
 export function stateFromGame(row: GameRow): GameState {
   return deserializeGameState(row.state_json);
 }
+
+// ── Game logs ─────────────────────────────────────────────────────────────────
+
+export interface GameLog {
+  id: string;
+  game_id: string | null;
+  mode: string;                   // 'multiplayer' | 'computer' | 'local'
+  white_user_id: string | null;
+  black_user_id: string | null;
+  white_username: string | null;
+  black_username: string | null;
+  winner: string | null;          // 'white' | 'black' | null
+  snapshots: SerializedGameState[];
+  notations: string[];
+  move_count: number;
+  created_at: string;
+}
+
+export type GameLogSummary = Omit<GameLog, 'snapshots'>;
+
+export async function saveGameLog(entry: Omit<GameLog, 'id' | 'created_at'>): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('game_logs')
+    .upsert(entry, { onConflict: 'game_id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
+export async function listGameLogs(limit = 60): Promise<GameLogSummary[]> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('game_logs')
+    .select('id, game_id, mode, white_user_id, black_user_id, white_username, black_username, winner, notations, move_count, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function loadGameLog(id: string): Promise<GameLog> {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('game_logs')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data;
+}

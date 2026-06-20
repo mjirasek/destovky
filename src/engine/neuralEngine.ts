@@ -24,7 +24,7 @@ import type { EngineAction } from './randomEngine';
 
 const N_FEATURES  = 790;
 const ACTION_SIZE = 4165;
-const TEMPERATURE = 1.0;    // softmax temperature; >0 adds diversity, prevents cycles
+const TEMPERATURE = 0.3;    // lower = more decisive; reduces cycling
 
 const ROLES: CGRole[]        = ['pawn', 'knight', 'bishop', 'rook', 'queen', 'king'];
 const COLORS: Color[]        = ['white', 'black'];
@@ -130,16 +130,37 @@ function idxToAction(idx: number): EngineAction {
 }
 
 
+// ── Board position hash (for repetition detection) ────────────────────────────
+
+export function boardHash(state: GameState): string {
+  const entries = Array.from(state.board.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([sq, p]) => `${sq}${p.color[0]}${p.role[0]}`);
+  return `${state.turn}:${entries.join(',')}`;
+}
+
+
 // ── Main inference ────────────────────────────────────────────────────────────
 
-import { legalEngineActions } from './randomEngine';
+import { legalEngineActions, applyEngineAction } from './randomEngine';
 
 export async function chooseNeuralAction(
   state: GameState,
   session: ort.InferenceSession,
+  recentHashes?: Set<string>,
 ): Promise<EngineAction | null> {
-  const legal = legalEngineActions(state);
+  let legal = legalEngineActions(state);
   if (legal.length === 0) return null;
+
+  // Filter out move-piece actions that return to a recently seen position
+  if (recentHashes && recentHashes.size > 0) {
+    const nonRepeating = legal.filter(a => {
+      if (a.kind !== 'move-piece') return true;
+      return !recentHashes.has(boardHash(applyEngineAction(state, a)));
+    });
+    if (nonRepeating.length > 0) legal = nonRepeating;
+  }
+
   if (legal.length === 1) return legal[0];
 
   try {

@@ -6,9 +6,11 @@ import GameChat from './components/GameChat';
 import LobbyPage from './components/LobbyPage';
 import PromotionDialog from './components/PromotionDialog';
 import EnginePage from './components/EnginePage';
+import GameHistoryPage from './components/GameHistoryPage';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
+import { deserializeGameState, serializeGameState } from './gameSerialization';
 import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
-import { loadNeuralEngine, chooseNeuralAction } from './engine/neuralEngine';
+import { loadNeuralEngine, chooseNeuralAction, boardHash } from './engine/neuralEngine';
 import type { InferenceSession } from 'onnxruntime-web';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
 import {
@@ -24,8 +26,11 @@ import {
   listProfiles,
   listUserGames,
   loadGame,
+  loadGameLog,
+  listGameLogs,
   replaceGameForChallenge,
   registerAccount,
+  saveGameLog,
   sendGameMessage,
   sendLobbyMessage,
   signIn,
@@ -33,6 +38,8 @@ import {
   stateFromGame,
   touchProfileLastSeen,
   type Challenge,
+  type GameLog,
+  type GameLogSummary,
   type GameMessage,
   type GameRow,
   type LobbyMessage,
@@ -96,13 +103,14 @@ function failedCardNotation(before: GameState): string {
 async function playNeuralEngineTurnWithNotation(
   state: GameState,
   session: InferenceSession,
+  recentHashes?: Set<string>,
 ): Promise<{ state: GameState; notation: string } | null> {
   const movedColor = state.turn;
   let current = state;
   const notation: string[] = [];
   for (let step = 0; step < 6; step++) {
     if (current.gameOver || current.turn !== movedColor) break;
-    const action = await chooseNeuralAction(current, session);
+    const action = await chooseNeuralAction(current, session, recentHashes);
     if (!action) return null;
     const before = current;
     const actionNotation = engineActionNotation(before, action);
@@ -164,7 +172,7 @@ const TIME_PRESETS = [
   { label: '15+10', initial: 900,  increment: 10 },
 ];
 interface TimeControl { initial: number; increment: number; label: string; }
-type AppView = 'lobby' | 'game' | 'engine';
+type AppView = 'lobby' | 'game' | 'engine' | 'history';
 type LocalMode = 'hotseat' | 'computer';
 type AuthMode = 'sign-in' | 'register';
 
@@ -286,9 +294,14 @@ export default function App() {
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
   const [lobbyMessages, setLobbyMessages] = useState<LobbyMessage[]>([]);
   const [lobbyChatStatus, setLobbyChatStatus] = useState('');
+  const [gameLogs, setGameLogs] = useState<GameLogSummary[]>([]);
+  const [historyStatus, setHistoryStatus] = useState('');
+  const [viewingHistory, setViewingHistory] = useState(false);
   const activeGameRef = useRef<GameRow | null>(null);
   const savingGameRef = useRef(false);
   const engineThinkingRef = useRef(false);
+  const gameLogSavedRef = useRef(false);
+  const wasGameOverRef = useRef(false);
 
   useEffect(() => {
     loadNeuralEngine()
@@ -637,8 +650,9 @@ export default function App() {
     const timeout = window.setTimeout(() => {
       void (async () => {
         try {
+          const recentHashes = new Set(snapshots.slice(-8).map(boardHash));
           const result = engineType === 'neural' && neuralSession
-            ? await playNeuralEngineTurnWithNotation(liveGame, neuralSession)
+            ? await playNeuralEngineTurnWithNotation(liveGame, neuralSession, recentHashes)
             : playEngineTurnWithNotation(liveGame);
           if (!cancelled) {
             if (result) { pushSnapshot(result.state, `Computer ${result.notation}`, 'black'); setEngineStatus(''); }
@@ -657,12 +671,101 @@ export default function App() {
     };
   }, [activeGame, atLatest, engineType, liveGame, localMode, neuralLoading, neuralSession, pushSnapshot]);
 
+  // ── Auto-save game log on game over ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (!liveGame.gameOver) {
+      wasGameOverRef.current = false;
+      return;
+    }
+    if (wasGameOverRef.current || gameLogSavedRef.current || !hasSupabaseConfig) return;
+    // Only multiplayer (save once: white side) or signed-in computer player
+    if (activeGame && onlineSeat !== 'white') return;
+    if (!activeGame && !mpUser) return;
+
+    wasGameOverRef.current = true;
+    gameLogSavedRef.current = true;
+
+    let whiteUsername: string | null = null;
+    let blackUsername: string | null = null;
+    let mode = 'local';
+
+    if (activeGame) {
+      mode = 'multiplayer';
+      const wp = profiles.find(p => p.id === activeGame.white_user_id);
+      const bp = profiles.find(p => p.id === activeGame.black_user_id);
+      whiteUsername = wp?.display_name ?? wp?.username ?? null;
+      blackUsername = bp?.display_name ?? bp?.username ?? null;
+    } else if (localMode === 'computer') {
+      mode = 'computer';
+      const userProfile = profiles.find(p => p.id === mpUser?.id);
+      whiteUsername = userProfile?.display_name ?? userProfile?.username ?? 'Player';
+      blackUsername = engineType === 'neural' ? 'Neural Engine' : 'Random Engine';
+    }
+
+    void saveGameLog({
+      game_id: activeGame?.id ?? null,
+      mode,
+      white_user_id: activeGame?.white_user_id ?? mpUser?.id ?? null,
+      black_user_id: activeGame?.black_user_id ?? null,
+      white_username: whiteUsername,
+      black_username: blackUsername,
+      winner: liveGame.winner ?? null,
+      snapshots: snapshots.map(serializeGameState),
+      notations,
+      move_count: notations.length,
+    }).catch(() => {
+      // Silent fail — don't interrupt user flow
+    });
+  }, [liveGame.gameOver, liveGame.winner, activeGame, onlineSeat, mpUser, profiles, localMode, engineType, snapshots, notations]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryStatus('Loading...');
+    try {
+      const logs = await listGameLogs();
+      setGameLogs(logs);
+      setHistoryStatus('');
+    } catch (error) {
+      setHistoryStatus(error instanceof Error ? error.message : 'Could not load history');
+    }
+  }, []);
+
+  const handleViewHistoryGame = useCallback(async (id: string) => {
+    setHistoryStatus('Loading game...');
+    try {
+      const log: GameLog = await loadGameLog(id);
+      const deserialized = log.snapshots.map(deserializeGameState);
+      gameLogSavedRef.current = true;  // prevent re-saving this historical game
+      wasGameOverRef.current = true;
+      setActiveGame(null);
+      setActiveChallengeId(null);
+      setLocalMode('hotseat');
+      setGameSyncStatus('');
+      setLiveGame(deserialized[deserialized.length - 1]);
+      setSnapshots(deserialized);
+      setNotations(log.notations);
+      setSnapshotCursor(0);
+      setPendingNotation('');
+      setClocksActive(false);
+      setViewingHistory(true);
+      setHistoryStatus('');
+      setAppView('game');
+    } catch (error) {
+      setHistoryStatus(error instanceof Error ? error.message : 'Could not load game');
+    }
+  }, []);
+
+  // ── New game ─────────────────────────────────────────────────────────────────
+
   const handleNewGame = useCallback(() => {
     const s = createInitialState();
     setLiveGame(s); setSnapshots([s]); setNotations([]); setSnapshotCursor(null); setPendingNotation('');
     setClocks({ white: timeControl.initial, black: timeControl.initial });
     setClocksActive(false);
     setEngineStatus('');
+    gameLogSavedRef.current = false;
+    wasGameOverRef.current = false;
+    setViewingHistory(false);
   }, [timeControl.initial]);
 
   const handleStartLocalGame = useCallback(() => {
@@ -1072,6 +1175,19 @@ export default function App() {
           </div>
         </div>
       )}
+      {viewingHistory && (
+        <button
+          type="button"
+          onClick={() => { setAppView('history'); setViewingHistory(false); }}
+          style={{
+            width: '100%', padding: '7px', borderRadius: '8px',
+            fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+            background: '#1a1e2a', color: '#60a0d0', border: '1px solid #2a3a5a',
+          }}
+        >
+          Back to History
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setAppView('lobby')}
@@ -1191,6 +1307,16 @@ export default function App() {
           fontWeight: 800,
           cursor: 'pointer',
         }}>Engine</button>
+        <button type="button" onClick={() => { setPlayMenuOpen(false); setAppView('history'); void loadHistory(); }} style={{
+          background: appView === 'history' ? '#1a1e2a' : 'transparent',
+          color: appView === 'history' ? '#60a0d0' : '#9e9b96',
+          border: `1px solid ${appView === 'history' ? '#2a3a5a' : 'transparent'}`,
+          borderRadius: '6px',
+          padding: '6px 9px',
+          fontSize: '12px',
+          fontWeight: 800,
+          cursor: 'pointer',
+        }}>History</button>
       </nav>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
@@ -1263,6 +1389,20 @@ export default function App() {
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
         {appHeader}
         <EnginePage />
+      </div>
+    );
+  }
+
+  if (appView === 'history') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#161512', color: '#bababa' }}>
+        {appHeader}
+        <GameHistoryPage
+          logs={gameLogs}
+          status={historyStatus}
+          onViewGame={id => void handleViewHistoryGame(id)}
+          onRefresh={() => void loadHistory()}
+        />
       </div>
     );
   }

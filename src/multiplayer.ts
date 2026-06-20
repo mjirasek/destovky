@@ -409,6 +409,7 @@ export interface GameLog {
   black_is_human: boolean;
   winner: string | null;          // 'white' | 'black' | null
   status: string;                 // 'finished' | 'draw' | 'ongoing'
+  engine_version: string | null;  // e.g. 'Gen5', 'Gen6', null for human vs human
   snapshots: SerializedGameState[];
   notations: string[];
   move_count: number;
@@ -421,7 +422,7 @@ export async function saveGameLog(entry: Omit<GameLog, 'id' | 'created_at'>): Pr
   const client = requireSupabase();
   const { error } = await client
     .from('game_logs')
-    .upsert(entry, { onConflict: 'game_id', ignoreDuplicates: true });
+    .upsert(entry, { onConflict: 'game_id', ignoreDuplicates: false });
   if (error) throw error;
 }
 
@@ -429,7 +430,7 @@ export async function listGameLogs(limit = 60): Promise<GameLogSummary[]> {
   const client = requireSupabase();
   const { data, error } = await client
     .from('game_logs')
-    .select('id, game_id, mode, white_user_id, black_user_id, white_username, black_username, white_is_human, black_is_human, winner, status, notations, move_count, created_at')
+    .select('id, game_id, mode, white_user_id, black_user_id, white_username, black_username, white_is_human, black_is_human, winner, status, engine_version, notations, move_count, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;

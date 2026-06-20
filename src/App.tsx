@@ -10,7 +10,7 @@ import GameHistoryPage from './components/GameHistoryPage';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
 import { deserializeGameState, serializeGameState } from './gameSerialization';
 import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
-import { loadNeuralEngine, chooseNeuralAction, boardHash } from './engine/neuralEngine';
+import { loadNeuralEngine, chooseNeuralAction, boardHash, ENGINE_VERSION } from './engine/neuralEngine';
 import type { InferenceSession } from 'onnxruntime-web';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
 import {
@@ -684,6 +684,7 @@ export default function App() {
     let mode = 'local';
     let white_is_human = true;
     let black_is_human = true;
+    let engine_version: string | null = null;
 
     if (activeGame) {
       mode = 'multiplayer';
@@ -694,9 +695,10 @@ export default function App() {
     } else if (localMode === 'computer') {
       mode = 'computer';
       black_is_human = false;
+      engine_version = engineType === 'neural' ? ENGINE_VERSION : 'random';
       const userProfile = profiles.find(p => p.id === mpUser?.id);
       whiteUsername = userProfile?.display_name ?? userProfile?.username ?? 'Player';
-      blackUsername = engineType === 'neural' ? 'Neural Engine' : 'Random Engine';
+      blackUsername = engineType === 'neural' ? `Neural (${ENGINE_VERSION})` : 'Random Engine';
     }
 
     void saveGameLog({
@@ -710,6 +712,7 @@ export default function App() {
       black_is_human,
       winner: liveGame.winner ?? null,
       status,
+      engine_version,
       snapshots: snapshots.map(serializeGameState),
       notations,
       move_count: notations.length,

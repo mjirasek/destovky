@@ -80,7 +80,7 @@ export default function GameHistoryPage({
                     {log.black_username ?? 'Black'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#5a5753', marginTop: '3px' }}>
-                    {modeLabel(log.mode)} · {log.move_count} moves · {formatDate(log.created_at)}
+                    {modeLabel(log.mode)}{log.engine_version ? ` · engine ${log.engine_version}` : ''} · {log.move_count} moves · {formatDate(log.created_at)}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

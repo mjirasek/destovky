@@ -26,6 +26,8 @@ const N_FEATURES  = 790;
 const ACTION_SIZE = 4165;
 const TEMPERATURE = 0.3;    // lower = more decisive; reduces cycling
 
+export const ENGINE_VERSION = 'Gen5';   // bump this whenever engine.onnx is replaced
+
 const ROLES: CGRole[]        = ['pawn', 'knight', 'bishop', 'rook', 'queen', 'king'];
 const COLORS: Color[]        = ['white', 'black'];
 const PROMOTE_ROLES: PromotionRole[] = ['queen', 'rook', 'bishop', 'knight'];

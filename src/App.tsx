@@ -8,6 +8,8 @@ import PromotionDialog from './components/PromotionDialog';
 import EnginePage from './components/EnginePage';
 import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
 import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
+import { loadNeuralEngine, chooseNeuralAction } from './engine/neuralEngine';
+import type { InferenceSession } from 'onnxruntime-web';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
 import {
   acceptChallenge,
@@ -89,6 +91,27 @@ function failedCardNotation(before: GameState): string {
   if (!card) return 'failed card';
   const role = card.type === 'bishop-light' || card.type === 'bishop-dark' ? 'bishop' : card.type as CGPiece['role'];
   return `${SYM[role][before.turn]}->x`;
+}
+
+async function playNeuralEngineTurnWithNotation(
+  state: GameState,
+  session: InferenceSession,
+): Promise<{ state: GameState; notation: string } | null> {
+  const movedColor = state.turn;
+  let current = state;
+  const notation: string[] = [];
+  for (let step = 0; step < 6; step++) {
+    if (current.gameOver || current.turn !== movedColor) break;
+    const action = await chooseNeuralAction(current, session);
+    if (!action) return null;
+    const before = current;
+    const actionNotation = engineActionNotation(before, action);
+    current = applyEngineAction(current, action);
+    if (actionNotation) notation.push(actionNotation);
+    if (action.kind === 'flip-card' && current.gameOver) notation.push(failedCardNotation(before));
+  }
+  if (current === state || notation.length === 0) return null;
+  return { state: current, notation: notation.join('') };
 }
 
 function playEngineTurnWithNotation(state: GameState): { state: GameState; notation: string } | null {
@@ -228,6 +251,9 @@ export default function App() {
   const [appView, setAppView] = useState<AppView>('lobby');
   const [localMode, setLocalMode] = useState<LocalMode>('hotseat');
   const [engineStatus, setEngineStatus] = useState('');
+  const [engineType, setEngineType] = useState<'neural' | 'random'>('neural');
+  const [neuralSession, setNeuralSession] = useState<InferenceSession | null>(null);
+  const [neuralLoading, setNeuralLoading] = useState(true);
   const [playMenuOpen, setPlayMenuOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -263,6 +289,12 @@ export default function App() {
   const activeGameRef = useRef<GameRow | null>(null);
   const savingGameRef = useRef(false);
   const engineThinkingRef = useRef(false);
+
+  useEffect(() => {
+    loadNeuralEngine()
+      .then(session => { setNeuralSession(session); setNeuralLoading(false); })
+      .catch(() => setNeuralLoading(false));
+  }, []);
 
   const atLatest = snapshotCursor === null;
   const displayGame = atLatest ? liveGame : snapshots[snapshotCursor!];
@@ -596,25 +628,34 @@ export default function App() {
   useEffect(() => {
     if (localMode !== 'computer' || activeGame || liveGame.turn !== 'black' || liveGame.gameOver || !atLatest) return;
     if (engineThinkingRef.current) return;
+    if (engineType === 'neural' && (neuralLoading || !neuralSession)) return;
 
     engineThinkingRef.current = true;
-    setEngineStatus('Computer thinking...');
+    setEngineStatus('Thinking...');
+    let cancelled = false;
+
     const timeout = window.setTimeout(() => {
-      const result = playEngineTurnWithNotation(liveGame);
-      if (result) {
-        pushSnapshot(result.state, `Computer ${result.notation}`, 'black');
-        setEngineStatus('Computer moved');
-      } else {
-        setEngineStatus('Computer has no legal move');
-      }
-      engineThinkingRef.current = false;
-    }, 450);
+      void (async () => {
+        try {
+          const result = engineType === 'neural' && neuralSession
+            ? await playNeuralEngineTurnWithNotation(liveGame, neuralSession)
+            : playEngineTurnWithNotation(liveGame);
+          if (!cancelled) {
+            if (result) { pushSnapshot(result.state, `Computer ${result.notation}`, 'black'); setEngineStatus(''); }
+            else setEngineStatus('No legal move');
+          }
+        } finally {
+          if (!cancelled) engineThinkingRef.current = false;
+        }
+      })();
+    }, 300);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timeout);
       engineThinkingRef.current = false;
     };
-  }, [activeGame, atLatest, liveGame, localMode, pushSnapshot]);
+  }, [activeGame, atLatest, engineType, liveGame, localMode, neuralLoading, neuralSession, pushSnapshot]);
 
   const handleNewGame = useCallback(() => {
     const s = createInitialState();
@@ -1003,11 +1044,32 @@ export default function App() {
           border: '1px solid #34312c',
           borderRadius: '6px',
           padding: '8px 10px',
-          color: '#9e9b96',
           fontSize: '12px',
-          lineHeight: 1.35,
+          lineHeight: 1.5,
         }}>
-          You play White. Computer plays random legal Black moves. {engineStatus}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
+            <span style={{ color: '#9e9b96' }}>You play White</span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {(['neural', 'random'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setEngineType(t)}
+                  style={{
+                    padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                    background: engineType === t ? '#1e2a0f' : '#1a1816',
+                    color: engineType === t ? '#a8d060' : '#6e6b67',
+                    border: `1px solid ${engineType === t ? '#3a5a12' : '#34312c'}`,
+                  }}
+                >{t === 'neural' ? 'Neural' : 'Random'}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ color: '#6e6b67' }}>
+            {engineType === 'neural'
+              ? neuralLoading ? 'Loading neural engine...' : (engineStatus || 'Neural engine ready')
+              : (engineStatus || 'Random legal moves')}
+          </div>
         </div>
       )}
       <button
@@ -1094,7 +1156,7 @@ export default function App() {
               display: 'grid',
               gap: '4px',
             }}>
-              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Random legal engine" />
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Neural engine · switch to Random in-game" />
               <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartLocalGame(); }} title="Playground" detail="Local board practice" />
               <HeaderMenuButton
                 onClick={() => {

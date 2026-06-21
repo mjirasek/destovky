@@ -43,11 +43,15 @@ export default function GameHistoryPage({
           <button type="button" onClick={onRefresh} style={ghostBtn}>Refresh</button>
         </div>
         {status && (
-          <div style={{ color: '#c8a84a', fontSize: '12px', marginBottom: '12px' }}>{status}</div>
+          <div style={{ color: status.includes('does not exist') || status.includes('relation') ? '#c84a4a' : '#c8a84a', fontSize: '12px', marginBottom: '12px' }}>
+            {status.includes('does not exist') || status.includes('relation')
+              ? 'Game history table not set up. Run supabase/game_logs.sql in your Supabase SQL editor to enable history.'
+              : status}
+          </div>
         )}
-        {logs.length === 0 ? (
+        {logs.length === 0 && !status ? (
           <div style={{ color: '#6e6b67', fontSize: '13px', textAlign: 'center', padding: '48px 0' }}>
-            No completed games recorded yet.
+            No completed games recorded yet. Play vs Computer in Training mode to save games here.
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '6px' }}>

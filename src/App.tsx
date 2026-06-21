@@ -1230,25 +1230,35 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ color: '#9e9b96' }}>Engine</span>
             <div style={{ display: 'flex', gap: '4px' }}>
-              {(['neural', 'hybrid', 'random'] as const).map(t => (
-                <button key={t} type="button" onClick={() => setEngineType(t)} style={{
-                  padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
-                  background: engineType === t ? '#1e2a0f' : '#1a1816',
-                  color: engineType === t ? '#a8d060' : '#6e6b67',
-                  border: `1px solid ${engineType === t ? '#3a5a12' : '#34312c'}`,
-                }}>{t === 'hybrid' ? 'Hybrid' : t === 'neural' ? 'Neural' : 'Random'}</button>
-              ))}
+              <button type="button" title="Neural network + minimax chess engine (strongest)" onClick={() => setEngineType('hybrid')} style={{
+                padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                background: engineType === 'hybrid' ? '#1e2a0f' : '#1a1816',
+                color: engineType === 'hybrid' ? '#a8d060' : '#6e6b67',
+                border: `1px solid ${engineType === 'hybrid' ? '#3a5a12' : '#34312c'}`,
+              }}>Best</button>
+              <button type="button" title="Pure neural network engine" onClick={() => setEngineType('neural')} style={{
+                padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                background: engineType === 'neural' ? '#1e2a0f' : '#1a1816',
+                color: engineType === 'neural' ? '#a8d060' : '#6e6b67',
+                border: `1px solid ${engineType === 'neural' ? '#3a5a12' : '#34312c'}`,
+              }}>Neural</button>
+              <button type="button" title="Random legal moves (easy)" onClick={() => setEngineType('random')} style={{
+                padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                background: engineType === 'random' ? '#2a1e0f' : '#1a1816',
+                color: engineType === 'random' ? '#d09060' : '#6e6b67',
+                border: `1px solid ${engineType === 'random' ? '#5a3a12' : '#34312c'}`,
+              }}>Easy</button>
             </div>
           </div>
           {/* Status + training notice */}
           <div style={{ color: '#6e6b67', fontSize: '11px' }}>
-            {engineType === 'random' ? 'Random legal moves' :
-             engineType === 'hybrid' ? (neuralLoading ? 'Loading...' : (engineStatus || 'NN placement + minimax chess')) :
-             neuralLoading ? 'Loading neural engine...' : (engineStatus || 'Neural engine ready')}
+            {engineType === 'random' ? 'Easy mode: random legal moves' :
+             engineType === 'hybrid' ? (neuralLoading ? 'Loading engine...' : (engineStatus || `${ENGINE_VERSION} neural + minimax chess (best)`)) :
+             neuralLoading ? 'Loading engine...' : (engineStatus || `${ENGINE_VERSION} neural network`)}
           </div>
           {computerDifficulty === 'training' && (
             <div style={{ color: '#5a7a3a', fontSize: '10px', borderTop: '1px solid #2e2c29', paddingTop: '5px' }}>
-              Training mode: games saved as training data
+              Training mode: games saved to History
             </div>
           )}
         </div>
@@ -1350,7 +1360,7 @@ export default function App() {
               display: 'grid',
               gap: '4px',
             }}>
-              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Neural engine · switch to Random in-game" />
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Best engine (neural + minimax) or Easy mode" />
               <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartLocalGame(); }} title="Playground" detail="Local board practice" />
               <HeaderMenuButton
                 onClick={() => {

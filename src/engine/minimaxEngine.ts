@@ -146,12 +146,16 @@ function fastEval(state: GameState, color: Color): number {
     score += state.turn === color ? -30 : 30;
   }
 
+  // Deck advantage: better remaining cards = more future placements
+  const opp: Color = color === 'white' ? 'black' : 'white';
+  score += (deckEvFor(state, color) - deckEvFor(state, opp)) * 0.2;
+
   return score;
 }
 
 // ── Deck expected value ───────────────────────────────────────────────────────
 
-function deckEv(state: GameState, color: Color): number {
+function deckEvFor(state: GameState, color: Color): number {
   const deck = color === 'white' ? state.whiteDecks : state.blackDecks;
   if (!deck.pile.length) return 0;
   const total = deck.pile.reduce((s, c) => {
@@ -178,9 +182,60 @@ function orderMoves(state: GameState, moves: EngineAction[]): ScoredMove[] {
     .sort((a, b) => b.score - a.score);
 }
 
+// ── Quiescence search (captures only) ────────────────────────────────────────
+
+const QDEPTH_MAX = 4;
+
+function quiesce(
+  state: GameState,
+  alpha: number,
+  beta: number,
+  rootColor: Color,
+  qdepth: number,
+): number {
+  if (state.gameOver) return fastEval(state, rootColor);
+  const standPat = fastEval(state, rootColor);
+  const isMax = state.turn === rootColor;
+
+  if (isMax) {
+    if (standPat >= beta) return beta;
+    if (standPat > alpha) alpha = standPat;
+  } else {
+    if (standPat <= alpha) return alpha;
+    if (standPat < beta) beta = standPat;
+  }
+
+  if (qdepth >= QDEPTH_MAX) return standPat;
+
+  const captures: EngineAction[] = [];
+  for (const [from, dests] of state.legalMoves) {
+    for (const to of dests) {
+      if (state.board.has(to)) captures.push({ kind: 'move-piece', from, to });
+    }
+  }
+  if (captures.length === 0) return standPat;
+
+  const ordered = orderMoves(state, captures);
+  let best = standPat;
+
+  for (const { action } of ordered) {
+    const child = applyEngineAction(state, action);
+    const val = quiesce(child, alpha, beta, rootColor, qdepth + 1);
+    if (isMax) {
+      if (val > best) best = val;
+      if (val > alpha) alpha = val;
+    } else {
+      if (val < best) best = val;
+      if (val < beta) beta = val;
+    }
+    if (beta <= alpha) break;
+  }
+  return best;
+}
+
 // ── Alpha-beta minimax ────────────────────────────────────────────────────────
 
-const DEPTH = 2;
+const DEPTH = 3;
 const BRANCH_CAP = 25; // max moves at each node for speed
 
 function minimax(
@@ -190,7 +245,7 @@ function minimax(
   beta: number,
   rootColor: Color,
 ): number {
-  if (depth === 0 || state.gameOver) return fastEval(state, rootColor);
+  if (depth === 0 || state.gameOver) return quiesce(state, alpha, beta, rootColor, 0);
 
   // Only consider move-piece actions at inner nodes (chess phase)
   const moves: EngineAction[] = [];
@@ -226,7 +281,7 @@ function minimax(
 
 /**
  * Choose the best action using phase-appropriate logic:
- * - Chess phase (both kings): alpha-beta minimax depth 2
+ * - Chess phase (both kings): alpha-beta minimax depth 3 + quiescence
  * - Mixed phase (one king):   depth-1 fast eval
  * - Other:                    null (caller should fall back to NN)
  */
@@ -267,7 +322,7 @@ export function chooseMinimax(state: GameState): EngineAction | null {
 
   // In choose mode: compare minimax best vs flip EV
   if (state.turnMode === 'choose' && !state.inCheck && hasMyKing && hasOppKing) {
-    const ev = deckEv(state, color);
+    const ev = deckEvFor(state, color);
     const FLIP_THRESHOLD = 120;
     const FLIP_RISK = 0.25;
     if (ev >= FLIP_THRESHOLD && ev * FLIP_RISK > bestScore * 0.08) {

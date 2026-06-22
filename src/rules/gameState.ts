@@ -34,6 +34,39 @@ export function createInitialState(): GameState {
   };
 }
 
+export function createStandardChessState(): GameState {
+  const board = new Map<Square, CGPiece>();
+  const backRank: Array<CGPiece['role']> = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+  for (let file = 0; file < 8; file++) {
+    board.set(file,      { role: backRank[file], color: 'white' }); // rank 1
+    board.set(file + 8,  { role: 'pawn',         color: 'white' }); // rank 2
+    board.set(file + 48, { role: 'pawn',         color: 'black' }); // rank 7
+    board.set(file + 56, { role: backRank[file], color: 'black' }); // rank 8
+  }
+  const emptyDeck: Deck = { pile: [], revealed: null };
+  const base: GameState = {
+    board,
+    whiteDecks: emptyDeck,
+    blackDecks: emptyDeck,
+    promotionCounts: { white: 0, black: 0 },
+    promotionRolesUsed: { white: [], black: [] },
+    turn: 'white',
+    turnMode: 'choose',
+    cardFlipped: false,
+    whiteKingPlaced: true,
+    blackKingPlaced: true,
+    legalPlacementSquares: [],
+    legalMoves: new Map(),
+    inCheck: false,
+    gameOver: false,
+    winner: null,
+    drawOfferBy: null,
+    pendingPromotion: null,
+  };
+  const legalMoves = legalMovesForState(base, 'white');
+  return { ...base, legalMoves };
+}
+
 export function flipCard(state: GameState): GameState {
   if (state.cardFlipped || state.gameOver) return state;
   const deckKey = state.turn === 'white' ? 'whiteDecks' : 'blackDecks';

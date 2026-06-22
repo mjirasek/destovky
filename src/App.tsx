@@ -7,7 +7,7 @@ import LobbyPage from './components/LobbyPage';
 import PromotionDialog from './components/PromotionDialog';
 import EnginePage from './components/EnginePage';
 import GameHistoryPage from './components/GameHistoryPage';
-import { createInitialState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
+import { createInitialState, createStandardChessState, flipCard, placePiece, makeMove, completePromotion } from './gameState';
 import { deserializeGameState, serializeGameState } from './gameSerialization';
 import { applyEngineAction, chooseRandomEngineAction, type EngineAction } from './engine/randomEngine';
 import { loadNeuralEngine, chooseNeuralAction, boardHash, ENGINE_VERSION } from './engine/neuralEngine';
@@ -173,6 +173,23 @@ function playEngineTurnWithNotation(state: GameState): { state: GameState; notat
   return { state: current, notation: notation.join('') };
 }
 
+function playMinimaxTurnWithNotation(state: GameState): { state: GameState; notation: string } | null {
+  const movedColor = state.turn;
+  let current = state;
+  const notation: string[] = [];
+  for (let step = 0; step < 4; step++) {
+    if (current.gameOver || current.turn !== movedColor) break;
+    const action = chooseMinimax(current);
+    if (!action) return null;
+    const before = current;
+    const actionNotation = engineActionNotation(before, action);
+    current = applyEngineAction(current, action);
+    if (actionNotation) notation.push(actionNotation);
+  }
+  if (current === state || notation.length === 0) return null;
+  return { state: current, notation: notation.join("") };
+}
+
 function colorName(color: Color): string {
   return color === 'white' ? 'White' : 'Black';
 }
@@ -202,7 +219,7 @@ const TIME_PRESETS = [
 ];
 interface TimeControl { initial: number; increment: number; label: string; }
 type AppView = 'lobby' | 'game' | 'engine' | 'history';
-type LocalMode = 'hotseat' | 'computer';
+type LocalMode = 'hotseat' | 'computer' | 'chess-test';
 type AuthMode = 'sign-in' | 'register';
 
 // ── Responsive hook ───────────────────────────────────────────────────────────
@@ -347,11 +364,11 @@ export default function App() {
     activeGame && mpUser?.id === activeGame.white_user_id ? 'white'
       : activeGame && mpUser?.id === activeGame.black_user_id ? 'black'
         : null;
-  const activeSeat: Color | null = activeGame ? onlineSeat : localMode === 'computer' ? 'white' : null;
+  const activeSeat: Color | null = activeGame ? onlineSeat : (localMode === 'computer' || localMode === 'chess-test') ? 'white' : null;
   const activeGameId = activeGame?.id ?? null;
   const boardOrientation: Color = activeSeat ?? 'white';
-  const computerTurn = localMode === 'computer' && !activeGame && liveGame.turn === 'black';
-  const canAct = activeGame ? activeSeat === liveGame.turn : localMode === 'computer' ? !computerTurn : true;
+  const computerTurn = (localMode === 'computer' || localMode === 'chess-test') && !activeGame && liveGame.turn === 'black';
+  const canAct = activeGame ? activeSeat === liveGame.turn : (localMode === 'computer' || localMode === 'chess-test') ? !computerTurn : true;
   const interactive = atLatest && !liveGame.pendingPromotion && canAct;
   const listCursor = atLatest ? notations.length : snapshotCursor!;
 
@@ -670,9 +687,10 @@ export default function App() {
   }, [commitSnapshot, timeControl.initial, timeControl.increment]);
 
   useEffect(() => {
-    if (localMode !== 'computer' || activeGame || liveGame.turn !== 'black' || liveGame.gameOver || !atLatest) return;
+    if (localMode !== 'computer' && localMode !== 'chess-test') return;
+    if (activeGame || liveGame.turn !== 'black' || liveGame.gameOver || !atLatest) return;
     if (engineThinkingRef.current) return;
-    if ((engineType === 'neural' || engineType === 'hybrid') && (neuralLoading || !neuralSession)) return;
+    if (localMode === 'computer' && (engineType === 'neural' || engineType === 'hybrid') && (neuralLoading || !neuralSession)) return;
 
     engineThinkingRef.current = true;
     setEngineStatus('Thinking...');
@@ -682,7 +700,9 @@ export default function App() {
       void (async () => {
         try {
           const recentHashes = new Set(snapshots.slice(-8).map(boardHash));
-          const result = engineType === 'hybrid' && neuralSession
+          const result = localMode === 'chess-test'
+            ? playMinimaxTurnWithNotation(liveGame)
+            : engineType === 'hybrid' && neuralSession
             ? await playHybridEngineTurnWithNotation(liveGame, neuralSession, recentHashes)
             : engineType === 'neural' && neuralSession
             ? await playNeuralEngineTurnWithNotation(liveGame, neuralSession, recentHashes)
@@ -839,6 +859,27 @@ export default function App() {
     handleNewGame();
     setAppView('game');
   }, [handleNewGame]);
+
+  const handleStartChessTest = useCallback(() => {
+    if (notations.length > 0 && !liveGame.gameOver && !gameLogSavedRef.current) {
+      saveCurrentGameAsLog('ongoing');
+    }
+    gameLogSavedRef.current = false;
+    wasGameOverRef.current = false;
+    localGameIdRef.current = crypto.randomUUID();
+    const s = createStandardChessState();
+    setLiveGame(s); setSnapshots([s]); setNotations([]); setSnapshotCursor(null); setPendingNotation('');
+    setClocks({ white: timeControl.initial, black: timeControl.initial });
+    setClocksActive(false);
+    setEngineStatus('');
+    setViewingHistory(false);
+    setLocalMode('chess-test');
+    setActiveGame(null);
+    setActiveChallengeId(null);
+    setGameSyncStatus('');
+    setGuestName(null);
+    setAppView('game');
+  }, [liveGame.gameOver, notations.length, saveCurrentGameAsLog, timeControl.initial]);
 
   const handleStartGuest = useCallback((name: string) => {
     const trimmed = name.trim() || 'Guest';
@@ -1197,6 +1238,12 @@ export default function App() {
           onSendMessage={handleSendGameMessage}
         />
       )}
+      {localMode === 'chess-test' && !activeGame && (
+        <div style={{ background: '#1a1e2a', border: '1px solid #2a3a5a', borderRadius: '6px', padding: '8px 10px', fontSize: '12px', lineHeight: 1.5 }}>
+          <div style={{ color: '#60a0d0', fontWeight: 700 }}>Chess Test Mode</div>
+          <div style={{ color: '#6e6b67', fontSize: '11px', marginTop: '3px' }}>Standard chess — alpha-beta minimax depth 3 + quiescence. No deck phase.</div>
+        </div>
+      )}
       {localMode === 'computer' && !activeGame && (
         <div style={{
           background: '#1f1e1b',
@@ -1361,6 +1408,7 @@ export default function App() {
               gap: '4px',
             }}>
               <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartComputerGame(); }} title="Play against computer" detail="Best engine (neural + minimax) or Easy mode" />
+              <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartChessTest(); }} title="Chess test" detail="Standard chess vs minimax engine" />
               <HeaderMenuButton onClick={() => { setPlayMenuOpen(false); handleStartLocalGame(); }} title="Playground" detail="Local board practice" />
               <HeaderMenuButton
                 onClick={() => {

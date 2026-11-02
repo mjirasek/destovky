@@ -26,7 +26,11 @@ const N_FEATURES  = 790;
 const ACTION_SIZE = 4165;
 const TEMPERATURE = 0.3;    // lower = more decisive; reduces cycling
 
-export const ENGINE_VERSION = 'Gen7';   // bump this whenever engine.onnx is replaced
+export const ENGINE_VERSION = 'Gen8';   // bump this whenever engine.onnx is replaced
+// Gen8 = resnet-incremental campaign champion, gen 222 (ResNet arch, 2.74M
+// params, trained on the shared fixed-search self-play corpus, 81.7% vs the
+// heuristic-eval MCTS baseline at promotion time) -- the best-performing
+// checkpoint across all three campaigns run on maddog2020.
 
 const ROLES: CGRole[]        = ['pawn', 'knight', 'bishop', 'rook', 'queen', 'king'];
 const COLORS: Color[]        = ['white', 'black'];
